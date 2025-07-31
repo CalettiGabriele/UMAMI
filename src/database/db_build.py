@@ -116,11 +116,11 @@ class DatabaseBuilder:
             table_order = [
                 'Associati',
                 'ChiaviElettroniche', 
-                'DatiTesseramentoFIV',
+                'TessereFIV',
                 'Fornitori',
                 'ServiziFisici',
                 'PrezziServizi',
-                'ServiziPrestazionali',
+                'Prestazioni',
                 'AssegnazioniServiziFisici',
                 'ErogazioniPrestazioni',
                 'Fatture',

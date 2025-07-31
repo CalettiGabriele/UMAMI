@@ -67,58 +67,52 @@
           "constraints": ["PRIMARY KEY", "REFERENCES Associati(id_associato)"],
           "description": "Collega questi dati a un unico socio. Agisce sia da Chiave Primaria che da Chiave Esterna"
         },
+        "key_code": {
+          "type": "VARCHAR(50)",
+          "constraints": ["UNIQUE"],
+          "description": "Codice univoco associato alla chiave/badge elettronico dell'associato"
+        },
+        "in_regola": {
+          "type": "BOOLEAN",
+          "description": "Valore che consente l'accesso solo se l'associato è in regola con i pagamenti"
+        },
+        "credito": {
+          "type": "DECIMAL(10,2)",
+          "default": "0.00",
+          "description": "Saldo del credito residuo del socio per l'utilizzo delle docce"
+        }
+      }
+    },
+    "TessereFIV": {
+      "description": "Contiene i dati aggiuntivi solo per i soci tesserati FIV",
+      "columns": {
+        "fk_associato": {
+          "type": "INTEGER",
+          "constraints": ["PRIMARY KEY", "REFERENCES Associati(id_associato)"],
+          "description": "Collega questi dati a un unico socio. Agisce sia da Chiave Primaria che da Chiave Esterna"
+        },
         "numero_tessera_fiv": {
           "type": "VARCHAR(50)",
           "constraints": ["UNIQUE"],
           "description": "Il numero di tessera ufficiale rilasciato dalla FIV"
         },
-        "codice_accesso_locali": {
-          "type": "VARCHAR(50)",
-          "description": "Codice per l'accesso ai locali dell'associazione"
-        },
-        "credito_docce": {
-          "type": "DECIMAL(10,2)",
-          "default": "0.00",
-          "description": "Credito disponibile per l'utilizzo delle docce"
-        }
-      }
-    },
-    "DatiTesseramentoFIV": {
-      "description": "Dati specifici del tesseramento FIV separati per maggiore chiarezza",
-      "columns": {
-        "fk_associato": {
-          "type": "INTEGER",
-          "constraints": ["PRIMARY KEY", "REFERENCES Associati(id_associato)"],
-          "description": "Riferimento al socio tesserato"
-        },
-        "numero_tessera_fiv": {
-          "type": "VARCHAR(50)",
-          "constraints": ["UNIQUE", "NOT NULL"],
-          "description": "Numero tessera FIV"
-        },
-        "data_tesseramento_fiv": {
+        "scadenza_tesseramento_fiv": {
           "type": "DATE",
-          "constraints": ["NOT NULL"],
-          "description": "Data del tesseramento FIV"
+          "description": "Data di scadenza del tesseramento FIV"
         },
         "scadenza_certificato_medico": {
           "type": "DATE",
-          "description": "Data di scadenza del certificato medico"
-        },
-        "stato_tesseramento": {
-          "type": "VARCHAR(20)",
-          "constraints": ["CHECK (stato_tesseramento IN ('Attivo', 'Sospeso', 'Scaduto'))"],
-          "description": "Stato del tesseramento FIV"
+          "description": "Data di scadenza del certificato medico (agonistico/non agonistico)"
         }
       }
     },
     "Fornitori": {
-      "description": "Anagrafica dei fornitori dell'associazione",
+      "description": "Anagrafica delle entità da cui l'associazione acquista beni o servizi",
       "columns": {
         "id_fornitore": {
           "type": "INTEGER",
           "constraints": ["PRIMARY KEY", "AUTOINCREMENT"],
-          "description": "ID unico del fornitore"
+          "description": "Identificativo unico del fornitore"
         },
         "ragione_sociale": {
           "type": "VARCHAR(255)",
@@ -126,21 +120,13 @@
           "description": "Ragione sociale del fornitore"
         },
         "partita_iva": {
-          "type": "VARCHAR(11)",
+          "type": "VARCHAR(20)",
           "constraints": ["UNIQUE"],
-          "description": "Partita IVA del fornitore"
-        },
-        "codice_fiscale": {
-          "type": "VARCHAR(16)",
-          "description": "Codice fiscale del fornitore"
-        },
-        "indirizzo": {
-          "type": "VARCHAR(255)",
-          "description": "Indirizzo del fornitore"
+          "description": "Partita IVA o Codice Fiscale del fornitore"
         },
         "email": {
           "type": "VARCHAR(255)",
-          "description": "Email del fornitore"
+          "description": "Email di contatto del fornitore"
         },
         "telefono": {
           "type": "VARCHAR(20)",
@@ -179,57 +165,37 @@
     "PrezziServizi": {
       "description": "Prezzario dei servizi fisici",
       "columns": {
-        "id_prezzo": {
+        "id_categoria_servizio": {
           "type": "INTEGER",
           "constraints": ["PRIMARY KEY", "AUTOINCREMENT"],
-          "description": "ID unico del prezzo"
+          "description": "ID unico della categoria"
         },
-        "fk_servizio_fisico": {
-          "type": "INTEGER",
-          "constraints": ["REFERENCES ServiziFisici(id_servizio_fisico)", "NOT NULL"],
-          "description": "Riferimento al servizio fisico"
-        },
-        "prezzo": {
+        "costo": {
           "type": "DECIMAL(10,2)",
-          "constraints": ["NOT NULL"],
-          "description": "Prezzo del servizio"
-        },
-        "data_validita_inizio": {
-          "type": "DATE",
-          "constraints": ["NOT NULL"],
-          "description": "Data di inizio validità del prezzo"
-        },
-        "data_validita_fine": {
-          "type": "DATE",
-          "description": "Data di fine validità del prezzo"
+          "description": "Prezzo di listino del servizio"
         }
       }
     },
-    "ServiziPrestazionali": {
-      "description": "Catalogo dei servizi prestazionali offerti dall'associazione",
+    "Prestazioni": {
+      "description": "Catalogo di tutti i servizi non tangibili (corsi, noleggi, quote, eventi)",
       "columns": {
         "id_prestazione": {
           "type": "INTEGER",
           "constraints": ["PRIMARY KEY", "AUTOINCREMENT"],
           "description": "ID unico della prestazione"
         },
-        "nome": {
+        "nome_prestazione": {
           "type": "VARCHAR(100)",
           "constraints": ["NOT NULL"],
-          "description": "Nome della prestazione"
+          "description": "Nome del servizio ('Corso Vela', 'Quota')"
         },
         "descrizione": {
           "type": "TEXT",
-          "description": "Descrizione della prestazione"
+          "description": "Dettagli sul servizio"
         },
-        "prezzo": {
+        "costo": {
           "type": "DECIMAL(10,2)",
-          "constraints": ["NOT NULL"],
-          "description": "Prezzo della prestazione"
-        },
-        "categoria": {
-          "type": "VARCHAR(50)",
-          "description": "Categoria della prestazione"
+          "description": "Prezzo di listino della prestazione"
         }
       }
     },
@@ -250,6 +216,10 @@
           "type": "INTEGER",
           "constraints": ["REFERENCES ServiziFisici(id_servizio_fisico)", "NOT NULL"],
           "description": "Il servizio fisico assegnato"
+        },
+        "anno_competenza": {
+          "type": "INTEGER",
+          "description": "Anno di validità dell'assegnazione (per rinnovi)"
         },
         "data_inizio": {
           "type": "DATE",
@@ -282,7 +252,7 @@
         },
         "fk_prestazione": {
           "type": "INTEGER",
-          "constraints": ["REFERENCES ServiziPrestazionali(id_prestazione)", "NOT NULL"],
+          "constraints": ["REFERENCES Prestazioni(id_prestazione)", "NOT NULL"],
           "description": "La prestazione erogata"
         },
         "data_erogazione": {

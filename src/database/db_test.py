@@ -47,8 +47,8 @@ class DatabasePopulator:
         print("\nPulizia dati esistenti...")
         tables = [
             'Pagamenti', 'DettagliFatture', 'Fatture', 'ErogazioniPrestazioni',
-            'AssegnazioniServiziFisici', 'PrezziServizi', 'ServiziPrestazionali',
-            'ServiziFisici', 'Fornitori', 'DatiTesseramentoFIV', 
+            'AssegnazioniServiziFisici', 'PrezziServizi', 'Prestazioni',
+            'ServiziFisici', 'Fornitori', 'TessereFIV', 
             'ChiaviElettroniche', 'Associati'
         ]
         try:
@@ -82,38 +82,52 @@ class DatabasePopulator:
         except sqlite3.Error as e:
             print(f"â— Errore in Associati: {e}")
 
-    def populate_dati_fiv(self):
-        """Popola DatiTesseramentoFIV."""
-        print("\nPopolamento tabella: DatiTesseramentoFIV")
+    def populate_tessere_fiv(self):
+        """Popola TessereFIV."""
+        print("\nPopolamento tabella: TessereFIV")
         dati_fiv = [
-            # Mario Rossi - Attivo, certificato valido
-            (1, 'FIV12345', '2024-01-20', (date.today() + timedelta(days=180)).strftime('%Y-%m-%d'), 'Attivo'),
-            # Luca Rossi - Attivo, certificato in scadenza
-            (3, 'FIV67890', '2024-01-20', (date.today() + timedelta(days=25)).strftime('%Y-%m-%d'), 'Attivo'),
-            # Giuseppe Verdi - Sospeso, certificato scaduto
-            (4, 'FIV54321', '2023-03-15', (date.today() - timedelta(days=60)).strftime('%Y-%m-%d'), 'Sospeso'),
+            # Mario Rossi - certificato valido
+            (1, 'FIV12345', (date.today() + timedelta(days=365)).strftime('%Y-%m-%d'), (date.today() + timedelta(days=180)).strftime('%Y-%m-%d')),
+            # Luca Rossi - certificato in scadenza
+            (3, 'FIV67890', (date.today() + timedelta(days=300)).strftime('%Y-%m-%d'), (date.today() + timedelta(days=25)).strftime('%Y-%m-%d')),
+            # Giuseppe Verdi - certificato scaduto
+            (4, 'FIV54321', (date.today() + timedelta(days=200)).strftime('%Y-%m-%d'), (date.today() - timedelta(days=60)).strftime('%Y-%m-%d')),
         ]
         try:
-            self.cursor.executemany("INSERT INTO DatiTesseramentoFIV VALUES (?,?,?,?,?)", dati_fiv)
-            print(f"âœ“ {len(dati_fiv)} record inseriti in DatiTesseramentoFIV.")
+            self.cursor.executemany("INSERT INTO TessereFIV VALUES (?,?,?,?)", dati_fiv)
+            print(f"âœ“ {len(dati_fiv)} record inseriti in TessereFIV.")
         except sqlite3.Error as e:
-            print(f"â— Errore in DatiTesseramentoFIV: {e}")
+            print(f"â— Errore in TessereFIV: {e}")
+
+    def populate_chiavi_elettroniche(self):
+        """Popola ChiaviElettroniche."""
+        print("\nPopolamento tabella: ChiaviElettroniche")
+        chiavi = [
+            (1, 'KEY001', True, 15.50),  # Mario Rossi
+            (3, 'KEY003', True, 8.00),   # Luca Rossi
+            (4, 'KEY004', False, 0.00),  # Giuseppe Verdi - non in regola
+        ]
+        try:
+            self.cursor.executemany("INSERT INTO ChiaviElettroniche VALUES (?,?,?,?)", chiavi)
+            print(f"✓ {len(chiavi)} record inseriti in ChiaviElettroniche.")
+        except sqlite3.Error as e:
+            print(f"✗ Errore in ChiaviElettroniche: {e}")
 
     def populate_fornitori(self):
         """Popola la tabella Fornitori."""
         print("\nPopolamento tabella: Fornitori")
         fornitori = [
-            (1, 'Sail & Fun S.r.l.', '01234567890', 'SLFSRL...', 'Via del Porto 100, Genova', 'info@sailfun.it', '010123456'),
-            (2, 'Pulizie Veloci S.p.A.', '09876543210', 'PLZVLC...', 'Via Industriale 50, Milano', 'amministrazione@pulizieveloci.it', '029876543'),
+            (1, 'Sail & Fun S.r.l.', '01234567890', 'info@sailfun.it', '010123456'),
+            (2, 'Pulizie Veloci S.p.A.', '09876543210', 'amministrazione@pulizieveloci.it', '029876543'),
         ]
         try:
-            self.cursor.executemany("INSERT INTO Fornitori VALUES (?,?,?,?,?,?,?)", fornitori)
+            self.cursor.executemany("INSERT INTO Fornitori VALUES (?,?,?,?,?)", fornitori)
             print(f"âœ“ {len(fornitori)} record inseriti in Fornitori.")
         except sqlite3.Error as e:
             print(f"â— Errore in Fornitori: {e}")
 
     def populate_servizi(self):
-        """Popola ServiziFisici, PrezziServizi, ServiziPrestazionali."""
+        """Popola ServiziFisici, PrezziServizi, Prestazioni."""
         print("\nPopolamento tabelle Servizi...")
         servizi_fisici = [
             (1, 'Posto Barca A-01', 'Posto barca fino a 8m', 'Posto Barca', 'Occupato'),
@@ -122,29 +136,29 @@ class DatabasePopulator:
             (4, 'Armadietto F-8', 'Armadietto spogliatoio femminile', 'Armadietto', 'In Manutenzione'),
         ]
         prezzi_servizi = [
-            (1, 1, 2500.00, '2024-01-01', '2024-12-31'),
-            (2, 2, 4000.00, '2024-01-01', '2024-12-31'),
-            (3, 3, 150.00, '2024-01-01', '2024-12-31'),
+            (1, 2500.00),
+            (2, 4000.00),
+            (3, 150.00),
         ]
-        servizi_prestazionali = [
-            (1, 'Corso Vela Base', 'Corso di 5 lezioni su deriva', 350.00, 'Corsi'),
-            (2, 'Regata Sociale Estiva', 'Iscrizione alla regata di club', 50.00, 'Eventi'),
-            (3, 'Quota Tesseramento FIV', 'Tesseramento annuale alla Federazione Italiana Vela', 30.00, 'Tesseramenti'),
+        prestazioni = [
+            (1, 'Corso Vela Base', 'Corso di 5 lezioni su deriva', 350.00),
+            (2, 'Regata Sociale Estiva', 'Iscrizione alla regata di club', 50.00),
+            (3, 'Quota Tesseramento FIV', 'Tesseramento annuale alla Federazione Italiana Vela', 30.00),
         ]
         try:
             self.cursor.executemany("INSERT INTO ServiziFisici VALUES (?,?,?,?,?)", servizi_fisici)
-            self.cursor.executemany("INSERT INTO PrezziServizi VALUES (?,?,?,?,?)", prezzi_servizi)
-            self.cursor.executemany("INSERT INTO ServiziPrestazionali VALUES (?,?,?,?,?)", servizi_prestazionali)
-            print(f"âœ“ {len(servizi_fisici)} ServiziFisici, {len(prezzi_servizi)} PrezziServizi, {len(servizi_prestazionali)} ServiziPrestazionali inseriti.")
+            self.cursor.executemany("INSERT INTO PrezziServizi VALUES (?,?)", prezzi_servizi)
+            self.cursor.executemany("INSERT INTO Prestazioni VALUES (?,?,?,?)", prestazioni)
+            print(f"✓ {len(servizi_fisici)} ServiziFisici, {len(prezzi_servizi)} PrezziServizi, {len(prestazioni)} Prestazioni inseriti.")
         except sqlite3.Error as e:
-            print(f"â— Errore nelle tabelle Servizi: {e}")
+            print(f"✗ Errore nelle tabelle Servizi: {e}")
 
     def populate_assegnazioni_e_erogazioni(self):
         """Popola AssegnazioniServiziFisici e ErogazioniPrestazioni."""
         print("\nPopolamento Assegnazioni e Erogazioni...")
         assegnazioni = [
-            (1, 4, 1, '2024-01-01', '2024-12-31', 'Attivo'), # Verdi, Posto Barca A-01
-            (2, 1, 3, '2024-01-01', '2024-12-31', 'Attivo'), # M. Rossi, Armadietto N-5
+            (1, 4, 1, 2024, '2024-01-01', '2024-12-31', 'Attivo'), # Verdi, Posto Barca A-01
+            (2, 1, 3, 2024, '2024-01-01', '2024-12-31', 'Attivo'), # M. Rossi, Armadietto N-5
         ]
         erogazioni = [
             (1, 3, 1, datetime(2024, 6, 10, 14, 0).strftime('%Y-%m-%d %H:%M:%S')), # L. Rossi, Corso Vela
@@ -152,7 +166,7 @@ class DatabasePopulator:
             (3, 3, 3, datetime(2024, 1, 20, 9, 0).strftime('%Y-%m-%d %H:%M:%S')),  # L. Rossi, Tesseramento FIV
         ]
         try:
-            self.cursor.executemany("INSERT INTO AssegnazioniServiziFisici VALUES (?,?,?,?,?,?)", assegnazioni)
+            self.cursor.executemany("INSERT INTO AssegnazioniServiziFisici VALUES (?,?,?,?,?,?,?)", assegnazioni)
             self.cursor.executemany("INSERT INTO ErogazioniPrestazioni VALUES (?,?,?,?)", erogazioni)
             print(f"âœ“ {len(assegnazioni)} Assegnazioni e {len(erogazioni)} Erogazioni inserite.")
         except sqlite3.Error as e:
@@ -206,7 +220,8 @@ class DatabasePopulator:
 
         self.clear_data()
         self.populate_associati()
-        self.populate_dati_fiv()
+        self.populate_tessere_fiv()
+        self.populate_chiavi_elettroniche()
         self.populate_fornitori()
         self.populate_servizi()
         self.populate_assegnazioni_e_erogazioni()
