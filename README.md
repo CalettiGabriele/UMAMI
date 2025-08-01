@@ -1,115 +1,259 @@
-# Database UMAMI - Sistema Gestionale ASD
+# UMAMI - Sistema Gestionale ASD
 
-Questo modulo contiene gli strumenti per la creazione e gestione del database SQLite per il sistema gestionale dell'associazione sportiva dilettantistica.
+**UMAMI** è un sistema completo per la gestione di Associazioni Sportive Dilettantistiche, sviluppato con tecnologie moderne e architettura modulare.
 
-## File Principali
+## 🚀 Caratteristiche Principali
 
-- **`db_build.py`**: Script principale per la creazione del database
-- **`database_schema.json`**: Configurazione delle tabelle in formato JSON
-- **`data/`**: Directory contenente il database SQLite generato
+- **Gestione Associati**: Anagrafica completa con supporto per nuclei familiari
+- **Tesseramento FIV**: Integrazione con Federazione Italiana Vela
+- **Servizi Fisici**: Gestione posti barca, armadietti, locali
+- **Prestazioni**: Corsi, eventi, noleggi
+- **Contabilità**: Fatturazione, pagamenti, report finanziari
+- **Chiavi Elettroniche**: Sistema accessi e crediti docce
+- **API REST**: Interfaccia completa per integrazioni
 
-## Utilizzo
+## 🏗️ Architettura del Sistema
 
-### Creazione del Database
+```
+UMAMI/
+├── src/
+│   ├── backend/          # API REST FastAPI
+│   └── database/         # Database SQLite e script
+├── doc/                  # Documentazione completa
+└── README.md            # Questo file
+```
+
+## 📋 Prerequisiti
+
+- **Python 3.8+**
+- **uv** (gestore pacchetti Python) o **pip**
+- **SQLite 3**
+
+## ⚡ Quick Start
+
+### 1. Setup del Database
 
 ```bash
+# Crea e popola il database
 cd src/database
-python3 db_build.py
+uv run db_build.py
+uv run db_test.py
 ```
 
-Lo script:
-1. Legge la configurazione da `database_schema.json`
-2. Crea la directory `data/` se non esiste
-3. Genera il database SQLite `data/umami.db`
-4. Crea tutte le tabelle nell'ordine corretto per rispettare le foreign keys
-5. Verifica l'integrità del database creato
-
-### Modifica della Struttura
-
-Per modificare la struttura del database:
-
-1. Modifica il file `database_schema.json`
-2. Esegui nuovamente `python3 db_build.py`
-3. Il database esistente verrà automaticamente salvato come backup
-
-### Accesso al Database
+### 2. Avvio API Server
 
 ```bash
-# Accesso diretto con SQLite
-sqlite3 data/umami.db
+# Installa dipendenze (dalla root del progetto)
+uv sync
 
-# Visualizza tutte le tabelle
-.tables
-
-# Visualizza la struttura di una tabella
-.schema Associati
-
-# Esegui una query
-SELECT * FROM Associati;
+# Avvia server API
+uv run uvicorn src.backend.fastapi_builder:app --reload --host 0.0.0.0 --port 8001
 ```
 
-## Struttura del Database
+### 3. Accesso alla Documentazione API
 
-Il database è organizzato in tre aree logiche:
+- **API Swagger**: http://localhost:8001/docs
+- **API ReDoc**: http://localhost:8001/redoc
+- **Health Check**: http://localhost:8001/health
 
-### Area Anagrafiche
-- **Associati**: Soci dell'associazione con gestione legami familiari
-- **ChiaviElettroniche**: Dati operativi per accesso locali e crediti docce
-- **DatiTesseramentoFIV**: Dati specifici tesseramento Federazione Italiana Vela
+## 🗄️ Database
+
+### Struttura
+
+Il database SQLite è organizzato in **12 tabelle** suddivise in 3 aree:
+
+#### 📋 Area Anagrafiche
+- **Associati**: Soci con gestione legami familiari
+- **ChiaviElettroniche**: Accessi e crediti docce
+- **TessereFIV**: Tesseramento Federazione Italiana Vela
 - **Fornitori**: Anagrafica fornitori
 
-### Area Servizi
-- **ServiziFisici**: Catalogo risorse fisiche (posti barca, armadietti, etc.)
-- **PrezziServizi**: Prezzario servizi fisici con validità temporale
-- **ServiziPrestazionali**: Catalogo servizi prestazionali (corsi, eventi, etc.)
+#### 🏢 Area Servizi
+- **ServiziFisici**: Posti barca, armadietti, locali
+- **PrezziServizi**: Prezzario con validità temporale
+- **Prestazioni**: Corsi, eventi, noleggi
 
-### Area Contabile
-- **AssegnazioniServiziFisici**: Collegamento soci-servizi fisici per periodo
-- **ErogazioniPrestazioni**: Registro prestazioni erogate
-- **Fatture**: Registro documenti contabili (attivi e passivi)
-- **DettagliFatture**: Righe di dettaglio fatture
-- **Pagamenti**: Movimenti di cassa/banca
+#### 💰 Area Contabile
+- **AssegnazioniServiziFisici**: Assegnazioni per periodo
+- **ErogazioniPrestazioni**: Registro prestazioni
+- **Fatture**: Documenti contabili
+- **DettagliFatture**: Righe di dettaglio
+- **Pagamenti**: Movimenti di cassa
 
-## Caratteristiche Tecniche
+### Gestione Database
 
-- **Database**: SQLite (compatibile con PostgreSQL per future migrazioni)
-- **Integrità referenziale**: Foreign keys abilitate
-- **Backup automatico**: Il database esistente viene salvato prima della ricreazione
-- **Validazione**: Controlli CHECK per valori enum
-- **Configurazione esterna**: Schema definito in JSON per facilità di modifica
+```bash
+# Crea database
+cd src/database
+uv run db_build.py
 
-## Esempi di Query Utili
+# Popola con dati di test
+uv run db_test.py
 
-```sql
--- Elenco soci attivi
-SELECT * FROM Associati WHERE stato_associato = 'Attivo';
-
--- Soci tesserati FIV
-SELECT a.*, d.numero_tessera_fiv, d.data_tesseramento_fiv 
-FROM Associati a 
-JOIN DatiTesseramentoFIV d ON a.id_associato = d.fk_associato;
-
--- Certificati medici in scadenza (prossimi 30 giorni)
-SELECT a.nome, a.cognome, d.scadenza_certificato_medico
-FROM Associati a 
-JOIN DatiTesseramentoFIV d ON a.id_associato = d.fk_associato 
-WHERE d.scadenza_certificato_medico BETWEEN date('now') AND date('now', '+30 days');
-
--- Fatture non pagate
-SELECT * FROM Fatture WHERE stato = 'Emessa';
-
--- Composizione gruppo familiare
-SELECT * FROM Associati 
-WHERE fk_associato_riferimento = [ID_PAGANTE] OR id_associato = [ID_PAGANTE];
+# Accesso diretto
+sqlite3 data/umami.db
 ```
 
-## Manutenzione
+## 🔌 API REST
 
-- Il database viene ricreato completamente ad ogni esecuzione di `db_build.py`
-- I backup vengono salvati automaticamente con timestamp
-- Per modifiche strutturali, aggiornare sempre `database_schema.json`
-- Verificare sempre l'integrità dopo le modifiche con il comando di verifica integrato
+### Endpoints Principali
 
-## Supporto
+#### Associati
+- `GET /associati` - Lista con filtri e paginazione
+- `POST /associati` - Crea nuovo associato
+- `GET /associati/{id}` - Dettagli associato
+- `PUT /associati/{id}` - Aggiorna associato
+- `POST /associati/{id}/tesseramento-fiv` - Gestione tesseramento
 
-Per problemi o modifiche alla struttura del database, consultare la documentazione completa in `doc/database_structure.md`.
+#### Fornitori
+- `GET /fornitori` - Lista fornitori
+- `POST /fornitori` - Crea fornitore
+- `PUT /fornitori/{id}` - Aggiorna fornitore
+- `DELETE /fornitori/{id}` - Elimina fornitore
+
+#### Chiavi Elettroniche
+- `GET /associati/{id}/chiave-elettronica` - Dettagli chiave
+- `POST /associati/{id}/chiave-elettronica` - Crea/aggiorna
+- `POST /associati/{id}/chiave-elettronica/ricarica` - Ricarica crediti
+
+#### Report
+- `GET /report/soci-morosi` - Soci con fatture non pagate
+- `GET /report/tesserati-fiv` - Report tesserati FIV
+- `GET /report/certificati-in-scadenza` - Certificati in scadenza
+
+### Esempi di Utilizzo
+
+#### Creare un Associato
+```bash
+curl -X POST "http://localhost:8001/associati" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nome": "Mario",
+    "cognome": "Rossi",
+    "codice_fiscale": "RSSMRA80A01H501Z",
+    "data_nascita": "1980-01-01",
+    "indirizzo": "Via Roma 1, Milano",
+    "email": "mario.rossi@email.com",
+    "telefono": "3331234567",
+    "data_iscrizione": "2024-01-15",
+    "stato_associato": "Attivo"
+  }'
+```
+
+#### Ricerca Associati
+```bash
+curl "http://localhost:8001/associati?search=mario&stato=Attivo&limit=10"
+```
+
+#### Report Soci Morosi
+```bash
+curl "http://localhost:8001/report/soci-morosi?giorni_scadenza=30&importo_minimo=100"
+```
+
+## 🛠️ Sviluppo
+
+### Struttura del Codice
+
+- **`pyproject.toml`** - Configurazione progetto e dipendenze
+- **`src/backend/fastapi_builder.py`** - Definizione endpoint FastAPI
+- **`src/backend/api_functions.py`** - Business logic e accesso database
+- **`src/database/db_build.py`** - Creazione database
+- **`src/database/db_test.py`** - Popolamento dati di test
+- **`src/database/database_schema.json`** - Schema database
+
+### Setup Ambiente di Sviluppo
+
+```bash
+# Installa dipendenze
+uv sync
+
+# Avvia server in modalità sviluppo
+uv run uvicorn src.backend.fastapi_builder:app --reload --port 8001
+```
+
+### Modifica Schema Database
+
+1. Modifica `src/database/database_schema.json`
+2. Esegui `uv run src/database/db_build.py`
+3. Testa con `uv run src/database/db_test.py`
+
+### Gestione Errori API
+
+- **404 Not Found** - Risorsa non trovata
+- **400 Bad Request** - Dati non validi
+- **500 Internal Server Error** - Errori database/server
+- **422 Unprocessable Entity** - Errori validazione
+
+## 📊 Query Utili
+
+```sql
+-- Soci attivi
+SELECT * FROM Associati WHERE stato_associato = 'Attivo';
+
+-- Tesserati FIV
+SELECT a.*, t.numero_tessera_fiv 
+FROM Associati a 
+JOIN TessereFIV t ON a.id_associato = t.fk_associato;
+
+-- Certificati in scadenza (30 giorni)
+SELECT a.nome, a.cognome, t.scadenza_certificato_medico
+FROM Associati a 
+JOIN TessereFIV t ON a.id_associato = t.fk_associato 
+WHERE t.scadenza_certificato_medico BETWEEN date('now') AND date('now', '+30 days');
+
+-- Fatture non pagate
+SELECT * FROM Fatture WHERE stato IN ('Emessa', 'Scaduta');
+```
+
+## 🔒 Sicurezza
+
+⚠️ **Nota**: Implementazione attuale per sviluppo/testing.
+
+Per produzione implementare:
+- Autenticazione JWT
+- Rate limiting
+- CORS appropriato
+- HTTPS
+- Logging di sicurezza
+- Validazione input avanzata
+
+## 📚 Documentazione
+
+- **`doc/database_structure.md`** - Struttura dettagliata database
+- **`doc/api_specification.md`** - Specifica completa API
+- **API Docs**: http://localhost:8001/docs (quando server attivo)
+
+## 🤝 Contribuire
+
+1. Fork del repository
+2. Crea feature branch (`git checkout -b feature/nuova-funzionalita`)
+3. Commit modifiche (`git commit -am 'Aggiunge nuova funzionalità'`)
+4. Push branch (`git push origin feature/nuova-funzionalita`)
+5. Crea Pull Request
+
+## 📝 Changelog
+
+### v1.0.0 (2024)
+- ✅ Database SQLite completo (12 tabelle)
+- ✅ API REST FastAPI con tutti gli endpoint
+- ✅ Documentazione API automatica
+- ✅ Sistema di gestione associati e fornitori
+- ✅ Gestione tesseramento FIV
+- ✅ Sistema chiavi elettroniche
+- ✅ Report avanzati
+- ✅ Validazione dati con Pydantic
+
+## 📄 Licenza
+
+Questo progetto è rilasciato sotto licenza MIT.
+
+## 🆘 Supporto
+
+Per problemi, bug o richieste di funzionalità:
+1. Controlla la documentazione in `doc/`
+2. Verifica gli issue esistenti
+3. Crea un nuovo issue con dettagli completi
+
+---
+
+**UMAMI** - *Sistema Gestionale ASD completo e moderno* 🏆
