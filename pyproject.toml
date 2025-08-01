@@ -3,11 +3,17 @@ name = "umami"
 version = "1.0.0"
 description = "Sistema Gestionale ASD - API REST per la gestione di Associazioni Sportive Dilettantistiche"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 dependencies = [
+    # Backend
     "fastapi>=0.104.1",
     "uvicorn[standard]>=0.24.0",
     "pydantic[email]>=2.5.0",
     "python-multipart>=0.0.6",
     "email-validator>=2.1.0",
+
+    # Frontend
+    "gradio>=4.0",
+    "requests>=2.31.0",
+    "pandas>=2.2.0",
 ]
