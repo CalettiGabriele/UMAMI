@@ -85,10 +85,10 @@ Crea un nuovo socio.
 
 ### `GET /associati/{id}`
 
-Recupera i dettagli di un singolo socio.
+Recupera i dettagli di un singolo socio. Ritorna anche se presenti i tesseramenti FIV, le chiavi elettroniche e le assegnazioni ai servizi fisici e prestazionali con le relative fatture e pagamenti.
 
 - **Success Response (200 OK):**
-  - Ritorna l'oggetto completo del socio.
+  - Ritorna l'oggetto completo del socio con le relative relazioni.
 
 ### `PUT /associati/{id}`
 
@@ -170,10 +170,10 @@ Crea un nuovo fornitore.
 
 ### `GET /fornitori/{id}`
 
-Recupera i dettagli di un singolo fornitore.
+Recupera i dettagli di un singolo fornitore. Ritorna anche se presenti le fatture e i pagamenti.
 
 - **Success Response (200 OK):**
-  - Ritorna l'oggetto completo del fornitore.
+  - Ritorna l'oggetto completo del fornitore con le relative relazioni.
 
 ### `PUT /fornitori/{id}`
 
@@ -249,7 +249,7 @@ Gestione del catalogo servizi (fisici e prestazionali) e delle assegnazioni.
 
 ### `GET /servizi-fisici`
 
-Recupera la lista dei servizi fisici (es. posti barca, armadietti).
+Recupera la lista dei servizi fisici (es. posti barca, armadietti) con costi e assegnazioni (id, nome e cognome del socio). Se non c'è assegnazione, il campo `fk_associato` sarà null.
 
 - **Query Parameters:**
   - `stato` (string): Filtra per stato (`Disponibile`, `Occupato`, `In Manutenzione`).
@@ -297,20 +297,11 @@ Crea un nuovo servizio fisico.
 
 ### `GET /servizi-fisici/{id}`
 
-Recupera i dettagli di un singolo servizio fisico, incluse le assegnazioni attive.
+Recupera i dettagli di un singolo servizio fisico. Ritorna anche le assegnazioni storiche con id, nome e cognome del socio per ogni anno.
 
 ### `PUT /servizi-fisici/{id}`
 
 Aggiorna i dati di un servizio fisico.
-
-### `GET /servizi-fisici/{id}/assegnazioni`
-
-Recupera tutte le assegnazioni (storiche e attive) per un servizio fisico.
-
-- **Query Parameters:**
-  - `stato` (string): Filtra per stato (`Attivo`, `Scaduto`, `Annullato`).
-  - `data_inizio_da` (date): Filtra assegnazioni dal periodo specificato.
-  - `data_inizio_a` (date): Filtra assegnazioni fino al periodo specificato.
 
 ### `POST /servizi-fisici/{id}/assegnazioni`
 
