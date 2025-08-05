@@ -147,11 +147,12 @@ def get_prezzo_servizio(prezzo_id):
     return _request("GET", f"/prezzi-servizi/{prezzo_id}")
 
 # --- Fatture ---
-def get_fatture(tipo="", stato="", search=""):
+def get_fatture(tipo="", stato="", search="", associato_id=None):
     params = {}
     if tipo: params['tipo'] = tipo
     if stato: params['stato'] = stato
     if search: params['search'] = search
+    if associato_id: params['associato_id'] = associato_id
     data = _request("GET", "/fatture", params=params)
     if data and isinstance(data, list):
         return pd.DataFrame(data)
@@ -169,11 +170,12 @@ def update_fattura(fattura_id, fattura_data):
     return _request("PUT", f"/fatture/{fattura_id}", json=fattura_data)
 
 # --- Pagamenti ---
-def get_pagamenti(metodo="", dal=None, al=None):
+def get_pagamenti(metodo="", dal=None, al=None, associato_id=None):
     params = {}
     if metodo: params['metodo'] = metodo
     if dal: params['dal'] = dal
     if al: params['al'] = al
+    if associato_id: params['associato_id'] = associato_id
     data = _request("GET", "/pagamenti", params=params)
     if data and isinstance(data, list):
         return pd.DataFrame(data)
