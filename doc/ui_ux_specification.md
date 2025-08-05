@@ -1,11 +1,11 @@
-# UMAMI - Specifica UI/UX e Flussi di Lavoro
+# UMAMI - Specifica UI/UX Frontend
 
-**Version:** 1.0.0  
-**Last Updated:** 2025-08-01
+**Version:** 2.0.0  
+**Last Updated:** 2025-08-05
 
 ## Introduzione
 
-Questo documento descrive l'architettura dell'interfaccia utente e i flussi di lavoro per il sistema gestionale UMAMI. L'analisi si concentra sui processi operativi e sui percorsi utente necessari per gestire efficacemente un'associazione sportiva dilettantistica.
+Questo documento descrive l'architettura dell'interfaccia utente del sistema gestionale UMAMI, definendo le pagine, le funzionalità e i flussi di navigazione del frontend. Il sistema è progettato per gestire efficacemente un'associazione sportiva dilettantistica attraverso un'interfaccia web intuitiva e funzionale.
 
 ## Principi di Design
 
@@ -30,339 +30,562 @@ Questo documento descrive l'architettura dell'interfaccia utente e i flussi di l
 │ Header: Logo UMAMI | Navigazione | Utente | Logout  │
 ├─────────────────────────────────────────────────────┤
 │ Sidebar Navigation                │ Area Contenuto  │
-│ • Dashboard                       │                 │
-│ • Associati                       │                 │
+│ • Anagrafica                      │                 │
+│   - Elenco Associati              │                 │
+│   - Scheda Associato              │                 │
+│   - Elenco Fornitori              │                 │
+│   - Scheda Fornitore              │                 │
 │ • Servizi                         │                 │
+│   - Elenco Servizi                │                 │
+│   - Scheda Servizio               │                 │
+│   - Prezzario Servizi             │                 │
+│   - Elenco Prestazioni            │                 │
 │ • Contabilità                     │                 │
+│   - Elenco Fatture                │                 │
+│   - Scheda Fattura                │                 │
+│   - Elenco Pagamenti              │                 │
 │ • Report                          │                 │
-│ • Configurazioni                  │                 │
+│   - Bilancio Economico            │                 │
+│   - Soci Morosi                   │                 │
 └─────────────────────────────────────────────────────┘
 ```
 
 ### Componenti Ricorrenti
-- **Tabelle con Filtri**: Liste paginabili con ricerca e filtri avanzati
-- **Form Modali**: Creazione/modifica rapida senza cambio pagina
-- **Card Informative**: Visualizzazione riassuntiva di dati complessi
-- **Wizard Multi-step**: Processi complessi suddivisi in passaggi
-- **Dashboard Widget**: Metriche e KPI in tempo reale
 
-## Flussi di Lavoro Principali
+**Elementi dell'Interfaccia**:
+- **Header Pagina**: Titolo "Gestione Associati" + Pulsante "Nuovo Associato"
+- **Barra Filtri**:
+  - Campo ricerca testuale (Nome, Cognome, Codice Fiscale)
+  - Dropdown "Stato" (Attivo, Sospeso, Scaduto, Cessato)
+  - Checkbox "Solo Tesserati FIV"
+  - Pulsante "Filtra" e "Reset"
+- **Tabella Risultati**:
+  - Colonne: ID, Nome, Cognome, Codice Fiscale, Stato, Data Iscrizione
+  - Ordinamento per colonna
+  - Paginazione (20 record per pagina)
+  - Click su riga → Apertura Scheda Associato
+- **Azioni Bulk**: Selezione multipla per operazioni di massa
 
-### 1. Gestione Associati
+**Funzionalità**:
+- Ricerca in tempo reale durante digitazione
+- Filtri combinabili e persistenti nella sessione
+- Export elenco in Excel/CSV
+- Indicatori visivi per stato associato (colori/icone)
 
-#### 1.1 Iscrizione Nuovo Socio
-**Attori**: Segreteria  
-**Frequenza**: Quotidiana  
-**Complessità**: Media
+#### 1.2 Scheda Associato
+**URL**: `/anagrafica/associati/{id}`  
+**Descrizione**: Visualizzazione dettagliata e modifica dati associato
 
-**Flusso Standard**:
-1. **Accesso Sezione Associati**
-   - Click su "Associati" nella sidebar
-   - Visualizzazione lista associati esistenti
+**Layout a Sezioni**:
 
-2. **Avvio Creazione**
-   - Click su "Nuovo Associato" (CTA prominente)
-   - Apertura form di inserimento
+**Sezione 1: Dati Anagrafici**
+- Nome, Cognome, Codice Fiscale
+- Data di Nascita, Luogo di Nascita
+- Indirizzo Completo
+- Email, Telefono
+- Data Iscrizione, Stato Associato
+- Associato di Riferimento (per gruppi familiari)
 
-3. **Inserimento Dati Anagrafici**
-   - Form con validazione in tempo reale
-   - Campi obbligatori evidenziati
-   - Controllo codice fiscale duplicato
+**Sezione 2: Tessera FIV**
+- Numero Tessera FIV
+- Data Rilascio, Data Scadenza
+- Stato Tesseramento
+- Certificato Medico (data scadenza)
+- Pulsante "Rinnova Tessera"
 
-4. **Gestione Gruppo Familiare** (opzionale)
-   - Toggle "Parte di gruppo familiare"
-   - Ricerca e selezione socio pagante
-   - Visualizzazione membri gruppo esistente
+**Sezione 3: Chiave Elettronica**
+- Codice Chiave
+- Stato (Attiva/Disattiva)
+- Crediti Docce Disponibili
+- Storico Ricariche
+- Pulsante "Ricarica Crediti"
 
-5. **Conferma e Salvataggio**
-   - Riepilogo dati inseriti
-   - Conferma creazione
-   - Redirect a scheda associato creato
+**Sezione 4: Servizi Assegnati**
+- Tabella servizi fisici attivi
+- Periodo di assegnazione
+- Stato servizio
+- Pulsante "Assegna Nuovo Servizio"
 
-**Varianti del Flusso**:
-- **Socio Minorenne**: Richiesta obbligatoria socio pagante
-- **Dati Incompleti**: Salvataggio bozza con promemoria
-- **Socio Esistente**: Avviso duplicato con opzione merge
+**Sezione 5: Prestazioni/Corsi**
+- Lista iscrizioni a corsi/eventi
+- Stato iscrizione
+- Date e orari
+- Pulsante "Nuova Iscrizione"
 
-#### 1.2 Tesseramento FIV
-**Attori**: Segreteria  
-**Frequenza**: Stagionale  
-**Complessità**: Bassa
+**Sezione 6: Situazione Pagamenti**
+- Fatture emesse (pagate/non pagate)
+- Importo totale dovuto
+- Ultimo pagamento
+- Link a "Dettaglio Contabilità"
 
-**Flusso**:
-1. **Accesso Scheda Associato**
-   - Ricerca associato (nome/codice fiscale)
-   - Click su risultato ricerca
+**Controlli Pagina**:
+- Pulsante "Modifica" (attiva modalità editing)
+- Pulsante "Salva" / "Annulla" (in modalità editing)
+- Pulsante "Elimina" (con conferma)
+- Breadcrumb di navigazione
 
-2. **Sezione Tesseramento**
-   - Tab "Tesseramento FIV" nella scheda
-   - Visualizzazione stato attuale
+#### 1.3 Elenco Fornitori
+**URL**: `/anagrafica/fornitori`  
+**Descrizione**: Gestione fornitori dell'associazione
 
-3. **Inserimento/Aggiornamento Dati**
-   - Form con campi specifici FIV
-   - Validazione numero tessera
-   - Calcolo automatico scadenze
+**Elementi dell'Interfaccia**:
+- **Header**: "Gestione Fornitori" + Pulsante "Nuovo Fornitore"
+- **Barra Filtri**:
+  - Campo ricerca (Ragione Sociale, Partita IVA)
+  - Pulsante "Filtra" e "Reset"
+- **Tabella**:
+  - Colonne: ID, Ragione Sociale, Partita IVA, Data Inserimento
+  - Click su riga → Scheda Fornitore
+- **Azioni**: Modifica, Elimina (con controllo vincoli)
 
-4. **Conferma**
-   - Salvataggio immediato
-   - Aggiornamento stato visivo
-   - Notifica successo
+#### 1.4 Scheda Fornitore
+**URL**: `/anagrafica/fornitori/{id}`  
+**Descrizione**: Dettagli e modifica dati fornitore
 
-#### 1.3 Gestione Chiavi Elettroniche
-**Attori**: Segreteria  
-**Frequenza**: Occasionale  
-**Complessità**: Bassa
+**Sezioni**:
 
-**Flusso**:
-1. **Accesso da Scheda Associato**
-   - Tab "Chiave Elettronica"
-   - Visualizzazione stato attuale
+**Sezione 1: Dati Aziendali**
+- Ragione Sociale
+- Partita IVA
+- Codice Fiscale (se diverso da P.IVA)
+- Indirizzo Sede Legale
 
-2. **Configurazione Chiave**
-   - Inserimento codice chiave
-   - Impostazione stato (attiva/disattiva)
-   - Gestione crediti docce
+**Sezione 2: Contatti**
+- Email
+- Telefono
+- Fax
+- Referente
 
-3. **Ricarica Crediti** (sub-flusso)
-   - Click "Ricarica Crediti"
-   - Inserimento importo
-   - Conferma transazione
-   - Aggiornamento saldo
+**Sezione 3: Dati Contabili**
+- Codice Fornitore
+- Modalità Pagamento Preferita
+- Giorni Pagamento
+- Note
 
-### 2. Gestione Servizi
+**Sezione 4: Storico Fatture**
+- Tabella fatture ricevute
+- Importi e date
+- Stato pagamento
+- Link a dettaglio fattura
 
-#### 2.1 Assegnazione Servizio Fisico
-**Attori**: Segreteria  
-**Frequenza**: Quotidiana  
-**Complessità**: Media
+### 2. SEZIONE SERVIZI
 
-**Flusso**:
-1. **Visualizzazione Servizi Disponibili**
-   - Sezione "Servizi Fisici"
-   - Griglia con stato visivo (disponibile/occupato/manutenzione)
-   - Filtri per tipo servizio
+#### 2.1 Elenco Servizi
+**URL**: `/servizi/elenco`  
+**Descrizione**: Gestione servizi fisici (barche, attrezzature)
 
-2. **Selezione Servizio**
-   - Click su servizio disponibile
-   - Apertura dettagli servizio
+**Elementi dell'Interfaccia**:
+- **Header**: "Gestione Servizi Fisici" + Pulsante "Nuovo Servizio"
+- **Filtri**:
+  - Dropdown "Tipo" (Deriva, Catamarano, Windsurf, etc.)
+  - Dropdown "Stato" (Disponibile, In Manutenzione, Ritirato)
+  - Campo ricerca nome
+- **Tabella**:
+  - Colonne: ID, Nome, Tipo, Stato, Note, Ultimo Utilizzo
+  - Indicatori visivi per stato
+  - Click su riga → Scheda Servizio
 
-3. **Assegnazione a Socio**
-   - Click "Assegna"
-   - Ricerca socio destinatario
-   - Selezione periodo validità
+#### 2.2 Scheda Servizio
+**URL**: `/servizi/dettaglio/{id}`  
+**Descrizione**: Dettagli servizio e storico assegnazioni
 
-4. **Configurazione Assegnazione**
-   - Definizione anno competenza
-   - Conferma prezzo applicato
-   - Note aggiuntive (opzionale)
+**Sezioni**:
 
-5. **Conferma**
-   - Riepilogo assegnazione
-   - Salvataggio
-   - Aggiornamento stato servizio
+**Sezione 1: Dati Servizio**
+- Nome Identificativo
+- Tipo Servizio
+- Stato Attuale
+- Note Tecniche
+- Data Acquisto/Dismissione
 
-#### 2.2 Iscrizione a Prestazione
-**Attori**: Segreteria, Istruttori  
-**Frequenza**: Quotidiana  
-**Complessità**: Bassa
+**Sezione 2: Storico Assegnazioni**
+- Tabella assegnazioni per anno
+- Colonne: Anno, Associato, Periodo, Durata
+- Filtri per anno e associato
+- Visualizzazione calendario occupazione
 
-**Flusso**:
-1. **Selezione Prestazione**
-   - Sezione "Prestazioni"
-   - Lista corsi/eventi disponibili
-   - Visualizzazione posti disponibili
+**Sezione 3: Manutenzioni**
+- Registro interventi
+- Date e descrizioni
+- Costi sostenuti
+- Prossima manutenzione programmata
 
-2. **Iscrizione Socio**
-   - Click "Iscriviti" su prestazione
-   - Ricerca e selezione socio
-   - Verifica prerequisiti (età, livello, etc.)
+**Sezione 4: Assegnazione Corrente**
+- Associato assegnatario
+- Periodo assegnazione
+- Pulsanti "Modifica Assegnazione" / "Termina Assegnazione"
 
-3. **Conferma Iscrizione**
-   - Riepilogo prestazione e costi
-   - Conferma iscrizione
-   - Aggiornamento posti disponibili
+#### 2.3 Prezzario Servizi
+**URL**: `/servizi/prezzi`  
+**Descrizione**: Gestione prezzi per categorie di servizi
 
-### 3. Gestione Contabile
+**Elementi dell'Interfaccia**:
+- **Header**: "Prezzario Servizi" + Pulsante "Nuovo Prezzo"
+- **Tabella Prezzi**:
+  - Colonne: Categoria Servizio, Prezzo, Validità Dal, Validità Al
+  - Modifica inline dei prezzi
+  - Storico variazioni prezzi
+- **Form Nuovo Prezzo**:
+  - Categoria servizio
+  - Importo
+  - Periodo di validità
+  - Note
 
-#### 3.1 Generazione Fatture Periodiche
-**Attori**: Amministrazione  
-**Frequenza**: Mensile/Trimestrale  
-**Complessità**: Alta
+#### 2.4 Elenco Prestazioni
+**URL**: `/servizi/prestazioni`  
+**Descrizione**: Gestione corsi, eventi e prestazioni
 
-**Flusso**:
-1. **Accesso Generazione Fatture**
-   - Sezione "Contabilità" > "Genera Fatture"
-   - Selezione periodo fatturazione
+**Elementi dell'Interfaccia**:
+- **Header**: "Gestione Prestazioni" + Pulsante "Nuova Prestazione"
+- **Filtri**:
+  - Tipo prestazione
+  - Stato (Programmata, In Corso, Conclusa)
+  - Periodo
+- **Tabella**:
+  - Colonne: Nome, Tipo, Istruttore, Date, Iscritti/Max, Stato
+  - Click su riga → Dettaglio prestazione
 
-2. **Configurazione Parametri**
-   - Selezione servizi da fatturare
-   - Filtri per tipo socio/servizio
-   - Anteprima importi
+**Sezione Dettaglio Prestazione**:
+- Dati prestazione (nome, descrizione, date)
+- Lista iscritti con stato pagamento
+- Pulsanti gestione (Aggiungi Iscritto, Modifica, Chiudi)
 
-3. **Revisione Pre-generazione**
-   - Lista associati da fatturare
-   - Dettaglio servizi per associato
-   - Possibilità esclusioni manuali
+### 3. SEZIONE CONTABILITÀ
 
-4. **Generazione Batch**
-   - Avvio processo generazione
-   - Progress bar con stato
-   - Log operazioni
+#### 3.1 Elenco Fatture
+**URL**: `/contabilita/fatture`  
+**Descrizione**: Gestione fatture attive e passive
 
-5. **Revisione Post-generazione**
-   - Riepilogo fatture create
-   - Gestione errori/eccezioni
-   - Invio automatico (opzionale)
+**Elementi dell'Interfaccia**:
+- **Header**: "Gestione Fatture" + Pulsante "Nuova Fattura"
+- **Filtri**:
+  - Tipo (Attive/Passive)
+  - Stato (Emessa, Pagata, Scaduta)
+  - Periodo emissione
+  - Cliente/Fornitore
+- **Tabella**:
+  - Colonne: Numero, Data, Cliente/Fornitore, Importo, Stato, Scadenza
+  - Indicatori visivi per fatture scadute
+  - Click su riga → Scheda Fattura
 
-#### 3.2 Registrazione Pagamento
-**Attori**: Segreteria, Amministrazione  
-**Frequenza**: Quotidiana  
-**Complessità**: Bassa
+#### 3.2 Scheda Fattura
+**URL**: `/contabilita/fatture/{id}`  
+**Descrizione**: Dettagli fattura e gestione pagamenti
 
-**Flusso**:
-1. **Identificazione Fattura**
-   - Ricerca per numero fattura/socio
-   - Visualizzazione fatture non pagate
-   - Selezione fattura target
+**Sezioni**:
 
-2. **Inserimento Pagamento**
-   - Form pagamento con dati fattura
-   - Selezione metodo pagamento
-   - Inserimento data e importo
+**Sezione 1: Dati Fattura**
+- Numero e Data Fattura
+- Cliente/Fornitore
+- Importo Totale
+- Data Scadenza
+- Stato Pagamento
 
-3. **Riconciliazione**
-   - Verifica corrispondenza importi
-   - Gestione pagamenti parziali
-   - Note aggiuntive
+**Sezione 2: Dettagli Fattura**
+- Tabella righe fattura
+- Descrizione, Quantità, Prezzo, Totale
+- Calcolo IVA e totali
 
-4. **Conferma**
-   - Salvataggio pagamento
-   - Aggiornamento stato fattura
-   - Generazione ricevuta (opzionale)
+**Sezione 3: Pagamenti**
+- Storico pagamenti ricevuti/effettuati
+- Importo residuo
+- Pulsante "Registra Pagamento"
 
-### 4. Reporting e Monitoraggio
+**Sezione 4: Documenti**
+- PDF fattura
+- Ricevute pagamento
+- Documenti allegati
 
-#### 4.1 Report Soci Morosi
-**Attori**: Amministrazione  
-**Frequenza**: Settimanale  
-**Complessità**: Bassa
+#### 3.3 Elenco Pagamenti
+**URL**: `/contabilita/pagamenti`  
+**Descrizione**: Registro movimenti di cassa
 
-**Flusso**:
-1. **Accesso Report**
-   - Sezione "Report" > "Soci Morosi"
-   - Configurazione parametri filtro
+**Elementi dell'Interfaccia**:
+- **Header**: "Registro Pagamenti" + Pulsante "Nuovo Pagamento"
+- **Filtri**:
+  - Tipo (Entrata/Uscita)
+  - Metodo pagamento
+  - Periodo
+  - Importo min/max
+- **Tabella**:
+  - Colonne: Data, Tipo, Descrizione, Importo, Metodo, Fattura Collegata
+  - Totali per periodo
+  - Export per contabilità
 
-2. **Personalizzazione Criteri**
-   - Giorni di scadenza minima
-   - Importo minimo dovuto
-   - Inclusione soci sospesi
+### 4. SEZIONE REPORT
 
-3. **Generazione Report**
-   - Elaborazione dati
-   - Visualizzazione risultati tabellari
-   - Metriche aggregate (totale crediti, numero soci)
+#### 4.1 Bilancio Economico
+**URL**: `/report/bilancio`  
+**Descrizione**: Report economico dell'associazione
 
-4. **Azioni Conseguenti**
-   - Export per solleciti
-   - Invio comunicazioni
-   - Aggiornamento stati soci
+**Elementi dell'Interfaccia**:
+- **Filtri Periodo**:
+  - Selezione anno
+  - Confronto con anno precedente
+  - Filtro per mese
 
-#### 4.2 Monitoraggio Certificati Medici
-**Attori**: Segreteria  
-**Frequenza**: Mensile  
-**Complessità**: Bassa
+**Sezioni Report**:
 
-**Flusso**:
-1. **Dashboard Scadenze**
-   - Widget certificati in scadenza
-   - Indicatori visivi per urgenza
-   - Filtro per giorni alla scadenza
+**Sezione 1: Riepilogo Generale**
+- Totale Entrate
+- Totale Uscite
+- Saldo Netto
+- Grafici trend mensili
 
-2. **Dettaglio Scadenze**
-   - Lista soci con certificati in scadenza
-   - Ordinamento per data scadenza
-   - Informazioni contatto
+**Sezione 2: Dettaglio Entrate**
+- Quote associative
+- Servizi fisici
+- Prestazioni/Corsi
+- Altre entrate
+- Breakdown per categoria
 
-3. **Azioni di Follow-up**
-   - Invio promemoria automatici
-   - Registrazione comunicazioni
-   - Aggiornamento stati tesseramento
+**Sezione 3: Dettaglio Uscite**
+- Fornitori
+- Manutenzioni
+- Utenze
+- Altre spese
+- Breakdown per categoria
 
-## Pattern di Interazione
+**Controlli Export**:
+- Pulsante "Scarica PDF"
+- Pulsante "Scarica Excel"
+- Opzioni stampa
 
-### Ricerca e Filtri
-- **Ricerca Globale**: Barra ricerca sempre visibile per associati
-- **Filtri Contestuali**: Filtri specifici per ogni sezione
-- **Ricerca Incrementale**: Risultati in tempo reale durante digitazione
-- **Filtri Salvati**: Possibilità salvare combinazioni filtri frequenti
+#### 4.2 Soci Morosi
+**URL**: `/report/morosi`  
+**Descrizione**: Elenco soci con pagamenti in ritardo
 
-### Gestione Errori
-- **Validazione Preventiva**: Controlli in tempo reale sui form
-- **Messaggi Chiari**: Spiegazione errori in linguaggio comprensibile
-- **Recupero Graceful**: Possibilità correzione senza perdita dati
-- **Conferme Critiche**: Dialog di conferma per azioni irreversibili
+**Elementi dell'Interfaccia**:
+- **Filtri**:
+  - Giorni di ritardo minimi
+  - Importo minimo dovuto
+  - Includi soci sospesi
+  - Stato associato
 
-### Feedback Utente
-- **Loading States**: Indicatori progresso per operazioni lunghe
-- **Notifiche Toast**: Conferme successo/errore non invasive
-- **Stati Visivi**: Indicatori chiari per stati record (attivo/sospeso/scaduto)
-- **Breadcrumb**: Navigazione contestuale sempre visibile
+**Tabella Risultati**:
+- Colonne: Nome, Cognome, Importo Dovuto, Giorni Ritardo, Ultima Fattura
+- Ordinamento per importo/giorni
+- Totale crediti
+- Numero soci coinvolti
+
+**Azioni**:
+- Export elenco per solleciti
+- Invio email automatiche
+- Stampa lettere di sollecito
+- Aggiornamento stato soci
+
+## Flussi di Navigazione
+
+### Navigazione Principale
+- **Sidebar Sempre Visibile**: Menu principale con sezioni collassabili
+- **Breadcrumb**: Percorso di navigazione in ogni pagina
+- **Ricerca Globale**: Barra ricerca associati sempre accessibile
+- **Shortcuts Tastiera**: Combinazioni rapide per azioni frequenti
+
+### Pattern di Interazione Ricorrenti
+
+#### Gestione Liste
+1. **Caricamento Pagina**: Visualizzazione lista con filtri di default
+2. **Applicazione Filtri**: Aggiornamento in tempo reale dei risultati
+3. **Selezione Record**: Click su riga per apertura dettaglio
+4. **Azioni Bulk**: Selezione multipla per operazioni di massa
+5. **Paginazione**: Controlli per navigazione tra pagine
+
+#### Gestione Schede Dettaglio
+1. **Visualizzazione**: Dati organizzati in sezioni logiche
+2. **Modalità Modifica**: Attivazione editing con pulsante "Modifica"
+3. **Validazione**: Controlli in tempo reale durante inserimento
+4. **Salvataggio**: Conferma modifiche con feedback visivo
+5. **Navigazione**: Possibilità di passare tra record correlati
+
+#### Gestione Form
+1. **Validazione Preventiva**: Controlli durante digitazione
+2. **Campi Obbligatori**: Evidenziazione visiva chiara
+3. **Suggerimenti**: Tooltip e placeholder informativi
+4. **Salvataggio Automatico**: Bozze per form complessi
+5. **Conferme**: Dialog per azioni irreversibili
+
+## Elementi UI Ricorrenti
+
+### Componenti Standard
+
+#### Tabelle Dati
+- **Header Fisso**: Intestazioni sempre visibili durante scroll
+- **Ordinamento**: Click su colonna per ordinamento ascendente/discendente
+- **Filtri Colonna**: Filtri specifici per ogni colonna
+- **Azioni Riga**: Menu contestuale per ogni record
+- **Selezione Multipla**: Checkbox per operazioni bulk
+
+#### Form di Input
+- **Layout Responsive**: Adattamento automatico a dimensione schermo
+- **Validazione Real-time**: Feedback immediato su errori
+- **Campi Dipendenti**: Aggiornamento automatico campi correlati
+- **Salvataggio Progressivo**: Salvataggio automatico bozze
+- **Reset Intelligente**: Ripristino valori precedenti
+
+#### Modali e Dialog
+- **Overlay Scuro**: Background semi-trasparente
+- **Chiusura Multipla**: ESC, click esterno, pulsante X
+- **Focus Management**: Gestione automatica focus
+- **Dimensioni Adattive**: Ridimensionamento per contenuto
+- **Animazioni Fluide**: Transizioni smooth per apertura/chiusura
+
+### Stati Visivi
+
+#### Indicatori di Stato
+- **Colori Semantici**: Verde (attivo), Rosso (scaduto), Giallo (attenzione)
+- **Icone Descrittive**: Simboli universalmente riconoscibili
+- **Badge Numerici**: Contatori per elementi in attesa
+- **Progress Bar**: Indicatori di completamento processi
+- **Loading Spinner**: Feedback per operazioni in corso
+
+#### Feedback Utente
+- **Toast Notifications**: Messaggi temporanei non invasivi
+- **Alert Banner**: Avvisi persistenti per situazioni critiche
+- **Inline Messages**: Feedback contestuale nei form
+- **Status Bar**: Informazioni di stato sempre visibili
+- **Confirmation Dialog**: Conferme per azioni critiche
 
 ## Responsive Design
 
-### Breakpoint Principali
-- **Desktop**: ≥1200px - Layout completo con sidebar
-- **Tablet**: 768px-1199px - Sidebar collassabile, layout adattivo
-- **Mobile**: <768px - Navigazione mobile, layout verticale
+### Breakpoint e Layout
 
-### Priorità Mobile
-- **Ricerca Rapida**: Accesso immediato a ricerca associati
-- **Azioni Critiche**: Registrazione pagamenti, iscrizioni urgenti
-- **Consultazione**: Visualizzazione dati associato, servizi
-- **Notifiche**: Alert per scadenze e azioni richieste
+#### Desktop (≥1200px)
+- **Sidebar Fissa**: Menu navigazione sempre visibile
+- **Layout Multi-colonna**: Sfruttamento spazio orizzontale
+- **Tabelle Complete**: Visualizzazione tutte le colonne
+- **Modali Centrate**: Dialog al centro schermo
+- **Tooltip Hover**: Informazioni aggiuntive al passaggio mouse
 
-## Accessibilità
+#### Tablet (768px-1199px)
+- **Sidebar Collassabile**: Menu nascondibile per spazio
+- **Layout Adattivo**: Riorganizzazione elementi
+- **Tabelle Scrollabili**: Scroll orizzontale per tabelle larghe
+- **Touch Friendly**: Elementi dimensionati per touch
+- **Orientamento Adattivo**: Supporto portrait/landscape
 
-### Standard di Conformità
-- **WCAG 2.1 AA**: Conformità standard internazionali
+#### Mobile (<768px)
+- **Menu Hamburger**: Navigazione nascosta in drawer
+- **Layout Verticale**: Stack elementi uno sotto l'altro
+- **Tabelle Card**: Trasformazione tabelle in card
+- **Swipe Gestures**: Navigazione con gesti touch
+- **Bottom Navigation**: Menu principale in basso
+
+### Ottimizzazioni Mobile
+
+#### Performance
+- **Lazy Loading**: Caricamento progressivo contenuti
+- **Image Optimization**: Immagini ottimizzate per dispositivo
+- **Caching Intelligente**: Cache locale per dati frequenti
+- **Offline Support**: Funzionalità base offline
+- **Progressive Web App**: Installazione come app nativa
+
+#### Usabilità
+- **Touch Targets**: Elementi touch di almeno 44px
+- **Scroll Momentum**: Scroll fluido e naturale
+- **Pull to Refresh**: Aggiornamento con gesto pull
+- **Haptic Feedback**: Feedback tattile per azioni
+- **Voice Input**: Supporto input vocale per ricerche
+
+## Accessibilità e Inclusività
+
+### Standard WCAG 2.1 AA
+
+#### Perceivabilità
+- **Contrasto Colori**: Rapporto minimo 4.5:1 per testo normale
+- **Testo Ridimensionabile**: Zoom fino al 200% senza perdita funzionalità
+- **Contenuto Non-testuale**: Alt text per immagini e icone
+- **Sottotitoli**: Per contenuti video/audio
+- **Orientamento**: Supporto portrait e landscape
+
+#### Operabilità
 - **Navigazione Tastiera**: Tutti gli elementi accessibili via tastiera
-- **Screen Reader**: Supporto completo per lettori schermo
-- **Contrasto**: Rapporti colore conformi alle linee guida
+- **Nessun Limite Tempo**: O possibilità di estensione
+- **Controllo Animazioni**: Possibilità disabilitare animazioni
+- **Focus Visibile**: Indicatori chiari per elemento attivo
+- **Shortcut Personalizzabili**: Combinazioni tasti configurabili
 
-### Considerazioni Specifiche
-- **Etichette Descrittive**: Label chiare per tutti i form
-- **Struttura Semantica**: HTML semantico per navigazione assistita
-- **Focus Management**: Gestione focus per modali e wizard
-- **Testi Alternativi**: Descrizioni per elementi grafici e icone
+#### Comprensibilità
+- **Linguaggio Semplice**: Terminologia chiara e consistente
+- **Etichette Descrittive**: Label significative per form
+- **Messaggi Errore**: Spiegazioni chiare e soluzioni
+- **Istruzioni**: Guidance per processi complessi
+- **Glossario**: Definizioni per termini tecnici
 
-## Metriche di Successo
+#### Robustezza
+- **Markup Semantico**: HTML strutturato correttamente
+- **Screen Reader**: Compatibilità con lettori schermo
+- **Browser Support**: Funzionamento su browser principali
+- **Graceful Degradation**: Funzionalità base anche senza JavaScript
+- **API Accessibility**: Supporto tecnologie assistive
 
-### KPI Usabilità
-- **Task Completion Rate**: >95% per operazioni principali
-- **Time on Task**: <2 minuti per iscrizione nuovo socio
-- **Error Rate**: <5% errori utente su form critici
-- **User Satisfaction**: Score >4/5 su questionari usabilità
+## Considerazioni Tecniche
 
-### Metriche Performance
-- **Page Load Time**: <2 secondi per pagine principali
-- **Time to Interactive**: <3 secondi su connessioni 3G
-- **Core Web Vitals**: Conformità standard Google
-- **Uptime**: >99.5% disponibilità sistema
+### Performance e Ottimizzazione
 
-## Considerazioni Future
+#### Metriche Target
+- **First Contentful Paint**: <1.5 secondi
+- **Largest Contentful Paint**: <2.5 secondi
+- **First Input Delay**: <100 millisecondi
+- **Cumulative Layout Shift**: <0.1
+- **Time to Interactive**: <3 secondi
 
-### Evoluzione Funzionale
-- **App Mobile Nativa**: Per soci e istruttori
-- **Integrazione Pagamenti**: Gateway pagamento online
-- **Comunicazioni Automatiche**: SMS/Email per scadenze
-- **Dashboard Soci**: Area riservata per consultazione dati
+#### Strategie Ottimizzazione
+- **Code Splitting**: Caricamento modulare del codice
+- **Tree Shaking**: Eliminazione codice non utilizzato
+- **Compression**: Gzip/Brotli per risorse statiche
+- **CDN**: Distribuzione contenuti geograficamente
+- **Service Workers**: Caching avanzato e offline support
 
-### Scalabilità
-- **Multi-tenant**: Supporto multiple associazioni
-- **Personalizzazione**: Temi e configurazioni per associazione
-- **Integrazione Esterna**: API per sistemi federali/regionali
-- **Analytics Avanzate**: Business intelligence e predittive
+### Sicurezza Frontend
+
+#### Protezione Dati
+- **HTTPS Only**: Comunicazioni sempre crittografate
+- **CSP Headers**: Content Security Policy restrittive
+- **XSS Prevention**: Sanitizzazione input utente
+- **CSRF Protection**: Token per form critici
+- **Session Management**: Gestione sicura sessioni utente
+
+#### Privacy
+- **GDPR Compliance**: Conformità regolamento europeo
+- **Cookie Consent**: Gestione consensi cookie
+- **Data Minimization**: Raccolta solo dati necessari
+- **Right to Erasure**: Possibilità cancellazione dati
+- **Audit Trail**: Log delle operazioni sensibili
+
+## Roadmap e Evoluzioni Future
+
+### Fase 1: Core Functionality (Q1 2025)
+- ✅ Gestione Anagrafica completa
+- ✅ Servizi e Prestazioni base
+- ✅ Contabilità essenziale
+- ✅ Report fondamentali
+- ✅ Responsive design
+
+### Fase 2: Advanced Features (Q2 2025)
+- 🔄 Dashboard avanzata con KPI
+- 🔄 Workflow automatizzati
+- 🔄 Integrazione sistemi pagamento
+- 🔄 Notifiche push
+- 🔄 Export avanzati
+
+### Fase 3: Mobile & Integration (Q3 2025)
+- 📋 App mobile nativa
+- 📋 API pubbliche
+- 📋 Integrazione sistemi esterni
+- 📋 Sincronizzazione offline
+- 📋 Geolocalizzazione servizi
+
+### Fase 4: AI & Analytics (Q4 2025)
+- 📋 Predizioni e suggerimenti AI
+- 📋 Analytics avanzate
+- 📋 Chatbot assistenza
+- 📋 Automazione processi
+- 📋 Business intelligence
 
 ---
 
-*Questo documento rappresenta la base per lo sviluppo dell'interfaccia utente del sistema UMAMI. Deve essere aggiornato iterativamente basandosi sui feedback degli utenti e sui test di usabilità.*
+**Documento Versione 2.0.0**  
+*Ultima modifica: 5 Agosto 2025*
+
+*Questo documento definisce l'architettura UI/UX del sistema UMAMI e deve essere utilizzato come riferimento per lo sviluppo frontend. Aggiornamenti e modifiche devono essere documentati e approvati dal team di progetto.*
