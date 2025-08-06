@@ -703,14 +703,177 @@ def scheda_fornitore_ui():
     """Scheda dettaglio fornitore"""
     gr.Markdown("### 📄 Scheda Fornitore")
     
-    fornitore_id = gr.Number(label="ID Fornitore", precision=0)
-    load_btn = gr.Button("📥 Carica", variant="primary")
+    with gr.Row():
+        fornitore_id = gr.Number(label="ID Fornitore", precision=0)
+        load_btn = gr.Button("📥 Carica", variant="primary")
     
     with gr.Group():
         gr.Markdown("#### 🏢 Dati Aziendali")
         with gr.Row():
-            ragione_sociale = gr.Textbox(label="Ragione Sociale")
-            partita_iva = gr.Textbox(label="Partita IVA")
+            ragione_sociale = gr.Textbox(label="Ragione Sociale", interactive=False)
+            partita_iva = gr.Textbox(label="Partita IVA", interactive=False)
+        with gr.Row():
+            email = gr.Textbox(label="Email", interactive=False)
+            telefono = gr.Textbox(label="Telefono", interactive=False)
+        with gr.Row():
+            fornitore_update_btn = gr.Button("✏️ Aggiorna Fornitore", variant="secondary", size="sm")
+    
+    # Modal per aggiornamento fornitore
+    with gr.Group(visible=False) as fornitore_update_modal:
+        gr.Markdown("### 📝 Aggiorna Dati Fornitore")
+        with gr.Row():
+            fornitore_modal_ragione_sociale = gr.Textbox(label="Ragione Sociale *", placeholder="Es: Azienda SRL")
+            fornitore_modal_partita_iva = gr.Textbox(label="Partita IVA *", placeholder="12345678901", max_lines=1)
+        with gr.Row():
+            fornitore_modal_email = gr.Textbox(label="Email *", placeholder="info@azienda.it")
+            fornitore_modal_telefono = gr.Textbox(label="Telefono *", placeholder="+39 123 456 7890")
+        with gr.Row():
+            fornitore_update_save_btn = gr.Button("💾 Salva", variant="primary")
+            fornitore_update_cancel_btn = gr.Button("❌ Annulla", variant="secondary")
+    
+    with gr.Group():
+        gr.Markdown("#### 💰 Fatture")
+        fornitore_fatture_table = gr.DataFrame(
+            headers=["ID", "Numero", "Data", "Tipo", "Importo", "Stato"],
+            interactive=False
+        )
+    
+    def load_fornitore(fid):
+        """Carica i dati del fornitore"""
+        if not fid:
+            gr.Warning("Inserisci un ID fornitore")
+            return [""] * 4 + [pd.DataFrame()]
+        
+        try:
+            # Carica dati fornitore
+            data = api_client.get_fornitore(int(fid))
+            if not data:
+                gr.Warning("Fornitore non trovato")
+                return [""] * 4 + [pd.DataFrame()]
+            
+            # Dati aziendali
+            anagrafica = [
+                safe_get(data, 'ragione_sociale', ''),
+                safe_get(data, 'partita_iva', ''),
+                safe_get(data, 'email', ''),
+                safe_get(data, 'telefono', '')
+            ]
+            
+            # Carica fatture del fornitore
+            try:
+                fatture_df = api_client.get_fatture(fornitore_id=int(fid))
+                if fatture_df.empty:
+                    fatture_df = pd.DataFrame(columns=["ID", "Numero", "Data", "Tipo", "Importo", "Stato"])
+                else:
+                    # Formatta le colonne per la visualizzazione
+                    if 'importo_totale' in fatture_df.columns:
+                        fatture_df['Importo'] = fatture_df['importo_totale'].apply(lambda x: f"€ {x:.2f}" if pd.notna(x) else "€ 0,00")
+                    
+                    # Usa i nomi di colonne corretti
+                    available_cols = ['id_fattura', 'numero_fattura', 'data_emissione', 'tipo_fattura', 'Importo', 'stato']
+                    existing_cols = [col for col in available_cols if col in fatture_df.columns]
+                    
+                    if len(existing_cols) >= 4:
+                        fatture_df = fatture_df[existing_cols].rename(columns={
+                            'id_fattura': 'ID', 'numero_fattura': 'Numero', 'data_emissione': 'Data', 
+                            'tipo_fattura': 'Tipo', 'stato': 'Stato'
+                        })
+                    else:
+                        fatture_df = pd.DataFrame(columns=["ID", "Numero", "Data", "Tipo", "Importo", "Stato"])
+            except Exception as e:
+                print(f"Errore caricamento fatture fornitore: {e}")
+                fatture_df = pd.DataFrame(columns=["ID", "Numero", "Data", "Tipo", "Importo", "Stato"])
+            
+            return anagrafica + [fatture_df]
+            
+        except Exception as e:
+            gr.Warning(f"Errore: {e}")
+            return [""] * 4 + [pd.DataFrame()]
+    
+    def show_fornitore_update_modal(fid, ragione_sociale, partita_iva, email, telefono):
+        """Mostra modal per aggiornare fornitore"""
+        if not fid:
+            gr.Warning("Seleziona prima un fornitore")
+            return gr.Group(visible=False), "", "", "", ""
+        return gr.Group(visible=True), ragione_sociale, partita_iva, email, telefono
+    
+    def hide_fornitore_update_modal():
+        """Nasconde modal aggiornamento fornitore"""
+        return gr.Group(visible=False), "", "", "", ""
+    
+    def save_fornitore_update(fid, ragione_sociale, partita_iva, email, telefono):
+        """Salva aggiornamento fornitore"""
+        if not fid:
+            gr.Warning("Nessun fornitore selezionato")
+            return gr.Group(visible=True), ragione_sociale, partita_iva, email, telefono, "", "", "", ""
+        
+        if not ragione_sociale or not partita_iva or not email or not telefono:
+            gr.Warning("Tutti i campi sono obbligatori")
+            return gr.Group(visible=True), ragione_sociale, partita_iva, email, telefono, "", "", "", ""
+        
+        # Validazione partita IVA
+        if len(partita_iva.strip()) != 11 or not partita_iva.strip().isdigit():
+            gr.Warning("La partita IVA deve essere di 11 cifre")
+            return gr.Group(visible=True), ragione_sociale, partita_iva, email, telefono, "", "", "", ""
+        
+        # Validazione email
+        if "@" not in email or "." not in email:
+            gr.Warning("Inserisci un'email valida")
+            return gr.Group(visible=True), ragione_sociale, partita_iva, email, telefono, "", "", "", ""
+        
+        try:
+            # Prepara i dati per l'API
+            fornitore_data = {
+                "ragione_sociale": ragione_sociale.strip(),
+                "partita_iva": partita_iva.strip(),
+                "email": email.strip(),
+                "telefono": telefono.strip()
+            }
+            
+            # Chiama l'API per aggiornare il fornitore
+            result = api_client.update_fornitore(int(fid), fornitore_data)
+            
+            if result:
+                gr.Info("Fornitore aggiornato con successo!")
+                return (gr.Group(visible=False), "", "", "", "", 
+                       fornitore_data["ragione_sociale"], fornitore_data["partita_iva"], 
+                       fornitore_data["email"], fornitore_data["telefono"])
+            else:
+                gr.Warning("Errore durante l'aggiornamento del fornitore")
+                return gr.Group(visible=True), ragione_sociale, partita_iva, email, telefono, "", "", "", ""
+                
+        except Exception as e:
+            gr.Warning(f"Errore: {str(e)}")
+            return gr.Group(visible=True), ragione_sociale, partita_iva, email, telefono, "", "", "", ""
+    
+    load_btn.click(
+        load_fornitore,
+        [fornitore_id],
+        [ragione_sociale, partita_iva, email, telefono, fornitore_fatture_table]
+    )
+    
+    fornitore_update_btn.click(
+        show_fornitore_update_modal,
+        [fornitore_id, ragione_sociale, partita_iva, email, telefono],
+        [fornitore_update_modal, fornitore_modal_ragione_sociale, fornitore_modal_partita_iva, 
+         fornitore_modal_email, fornitore_modal_telefono]
+    )
+    
+    fornitore_update_cancel_btn.click(
+        hide_fornitore_update_modal,
+        [],
+        [fornitore_update_modal, fornitore_modal_ragione_sociale, fornitore_modal_partita_iva, 
+         fornitore_modal_email, fornitore_modal_telefono]
+    )
+    
+    fornitore_update_save_btn.click(
+        save_fornitore_update,
+        [fornitore_id, fornitore_modal_ragione_sociale, fornitore_modal_partita_iva, 
+         fornitore_modal_email, fornitore_modal_telefono],
+        [fornitore_update_modal, fornitore_modal_ragione_sociale, fornitore_modal_partita_iva, 
+         fornitore_modal_email, fornitore_modal_telefono,
+         ragione_sociale, partita_iva, email, telefono]
+    )
 
 # ===== SEZIONE SERVIZI =====
 

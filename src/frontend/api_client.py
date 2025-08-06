@@ -57,6 +57,9 @@ def get_fornitori(search=""):
         return pd.DataFrame(data['results'])
     return pd.DataFrame()
 
+def get_fornitore(fornitore_id):
+    return _request("GET", f"/fornitori/{fornitore_id}")
+
 def create_fornitore(fornitore_data):
     return _request("POST", "/fornitori", json=fornitore_data)
 
