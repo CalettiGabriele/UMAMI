@@ -838,28 +838,28 @@ async def list_servizi_fisici(
         params = []
         
         if stato:
-            where_clauses.append("stato = ?")
+            where_clauses.append("sf.stato = ?")
             params.append(stato)
         
         if tipo:
-            where_clauses.append("tipo_servizio = ?")
+            where_clauses.append("sf.categoria = ?")
             params.append(tipo)
         
         where_clause = " AND ".join(where_clauses) if where_clauses else "1=1"
         
         # Get results with current assignments
         query = f"""
-        SELECT sf.id_servizio_fisico, sf.tipo_servizio, sf.descrizione, sf.stato,
+        SELECT sf.id_servizio_fisico, sf.nome, sf.categoria, sf.descrizione, sf.stato,
                ps.costo,
                asf.fk_associato,
-               a.nome, a.cognome
+               a.nome as assegnatario_nome, a.cognome as assegnatario_cognome
         FROM ServiziFisici sf
-        LEFT JOIN PrezziServizi ps ON sf.tipo_servizio = ps.id_categoria_servizio
+        LEFT JOIN PrezziServizi ps ON sf.categoria = ps.id_categoria_servizio
         LEFT JOIN AssegnazioniServiziFisici asf ON sf.id_servizio_fisico = asf.fk_servizio_fisico 
                   AND asf.stato = 'Attivo' AND asf.data_fine >= date('now')
         LEFT JOIN Associati a ON asf.fk_associato = a.id_associato
         WHERE {where_clause}
-        ORDER BY sf.tipo_servizio, sf.id_servizio_fisico
+        ORDER BY sf.categoria, sf.id_servizio_fisico
         """
         
         results = execute_query(query, tuple(params))
@@ -878,12 +878,12 @@ async def create_servizio_fisico_endpoint(servizio: ServizioFisicoCreate):
     try:
         # Insert new servizio fisico
         insert_query = """
-        INSERT INTO ServiziFisici (tipo_servizio, descrizione, stato)
-        VALUES (?, ?, ?)
+        INSERT INTO ServiziFisici (nome, descrizione, categoria, stato)
+        VALUES (?, ?, ?, ?)
         """
         
-        # For now, we'll use the 'tipo' as tipo_servizio (this should be an ID in a real implementation)
-        params = (1, servizio.descrizione, servizio.stato)  # Default tipo_servizio = 1
+        # Use the correct field mapping
+        params = (servizio.nome, servizio.descrizione, servizio.tipo, servizio.stato)
         
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -954,7 +954,15 @@ async def update_servizio_fisico_endpoint(
         if not update_data:
             raise HTTPException(status_code=400, detail="Nessun campo da aggiornare")
         
-        set_clauses = [f"{k} = ?" for k in update_data.keys()]
+        # Map model fields to database columns
+        field_mapping = {
+            'nome': 'nome',
+            'descrizione': 'descrizione', 
+            'tipo': 'categoria',
+            'stato': 'stato'
+        }
+        
+        set_clauses = [f"{field_mapping.get(k, k)} = ?" for k in update_data.keys()]
         update_query = f"UPDATE ServiziFisici SET {', '.join(set_clauses)} WHERE id_servizio_fisico = ?"
         
         params = list(update_data.values()) + [servizio_id]

@@ -6,8 +6,8 @@ import json
 
 # --- Constants ---
 STATO_ASSOCIATO_CHOICES = ["Attivo", "Sospeso", "Scaduto", "Cessato"]
-STATO_SERVIZIO_CHOICES = ["Disponibile", "In manutenzione", "Ritirato"]
-TIPO_SERVIZIO_CHOICES = ["Deriva", "Catamarano", "Windsurf", "Wingfoil", "SUP", "Canoa"]
+STATO_SERVIZIO_CHOICES = ["Disponibile", "Occupato", "In Manutenzione"]
+TIPO_SERVIZIO_CHOICES = ["Posto Barca", "Armadietto", "Deriva", "Catamarano", "Windsurf", "Wingfoil", "SUP", "Canoa"]
 STATO_FATTURA_CHOICES = ["Non pagata", "Pagata", "Parzialmente pagata", "Scaduta"]
 TIPO_FATTURA_CHOICES = ["Attiva", "Passiva"]
 METODI_PAGAMENTO = ["Contanti", "Bonifico", "Carta di credito", "Assegno", "PayPal"]
@@ -896,8 +896,24 @@ def elenco_servizi_ui():
         tipo = gr.Dropdown(label="Tipo", choices=[""] + TIPO_SERVIZIO_CHOICES)
         stato = gr.Dropdown(label="Stato", choices=[""] + STATO_SERVIZIO_CHOICES)
     
+    with gr.Row():
+        refresh_btn = gr.Button("🔄 Aggiorna", variant="secondary")
+        nuovo_servizio_btn = gr.Button("➕ Nuovo Servizio", variant="primary")
+    
     servizi_table = gr.DataFrame(interactive=False)
-    refresh_btn = gr.Button("🔄 Aggiorna")
+    
+    # Modal per nuovo servizio
+    with gr.Group(visible=False) as nuovo_servizio_modal:
+        gr.Markdown("### 📝 Nuovo Servizio Fisico")
+        with gr.Row():
+            servizio_modal_nome = gr.Textbox(label="Nome Servizio *", placeholder="Es: Posto Barca A-01")
+            servizio_modal_tipo = gr.Dropdown(label="Tipo *", choices=TIPO_SERVIZIO_CHOICES)
+        with gr.Row():
+            servizio_modal_descrizione = gr.Textbox(label="Descrizione *", placeholder="Descrizione dettagliata del servizio")
+            servizio_modal_stato = gr.Dropdown(label="Stato *", choices=STATO_SERVIZIO_CHOICES, value="Disponibile")
+        with gr.Row():
+            servizio_save_btn = gr.Button("💾 Salva", variant="primary")
+            servizio_cancel_btn = gr.Button("❌ Annulla", variant="secondary")
     
     def load_servizi(search_val, tipo_val, stato_val):
         try:
@@ -907,7 +923,69 @@ def elenco_servizi_ui():
             gr.Warning(f"Errore: {e}")
             return pd.DataFrame()
     
+    def show_nuovo_servizio_modal():
+        """Mostra modal per nuovo servizio"""
+        return gr.Group(visible=True), "", "", "", "Disponibile"
+    
+    def hide_nuovo_servizio_modal():
+        """Nasconde modal nuovo servizio"""
+        return gr.Group(visible=False), "", "", "", "Disponibile"
+    
+    def save_nuovo_servizio(nome, tipo, descrizione, stato):
+        """Salva nuovo servizio fisico"""
+        if not nome or not tipo or not descrizione or not stato:
+            gr.Warning("Tutti i campi sono obbligatori")
+            return gr.Group(visible=True), nome, tipo, descrizione, stato, pd.DataFrame()
+        
+        try:
+            # Prepara i dati per l'API
+            servizio_data = {
+                "nome": nome.strip(),
+                "tipo": tipo,
+                "descrizione": descrizione.strip(),
+                "stato": stato
+            }
+            
+            # Chiama l'API per creare il servizio
+            result = api_client.create_servizio_fisico(servizio_data)
+            
+            if result:
+                gr.Info(f"Servizio '{nome}' creato con successo!")
+                # Ricarica la tabella
+                updated_df = api_client.get_servizi_fisici()
+                return (gr.Group(visible=False), "", "", "", "Disponibile", 
+                       updated_df if not updated_df.empty else pd.DataFrame())
+            else:
+                gr.Warning("Errore durante la creazione del servizio")
+                return gr.Group(visible=True), nome, tipo, descrizione, stato, pd.DataFrame()
+                
+        except Exception as e:
+            gr.Warning(f"Errore: {str(e)}")
+            return gr.Group(visible=True), nome, tipo, descrizione, stato, pd.DataFrame()
+    
     refresh_btn.click(load_servizi, [search, tipo, stato], servizi_table)
+    
+    # Click handlers per nuovo servizio
+    nuovo_servizio_btn.click(
+        show_nuovo_servizio_modal,
+        [],
+        [nuovo_servizio_modal, servizio_modal_nome, servizio_modal_tipo, 
+         servizio_modal_descrizione, servizio_modal_stato]
+    )
+    
+    servizio_cancel_btn.click(
+        hide_nuovo_servizio_modal,
+        [],
+        [nuovo_servizio_modal, servizio_modal_nome, servizio_modal_tipo, 
+         servizio_modal_descrizione, servizio_modal_stato]
+    )
+    
+    servizio_save_btn.click(
+        save_nuovo_servizio,
+        [servizio_modal_nome, servizio_modal_tipo, servizio_modal_descrizione, servizio_modal_stato],
+        [nuovo_servizio_modal, servizio_modal_nome, servizio_modal_tipo, 
+         servizio_modal_descrizione, servizio_modal_stato, servizi_table]
+    )
 
 def prezzario_servizi_ui():
     """Gestione prezzi servizi"""
