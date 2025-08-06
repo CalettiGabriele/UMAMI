@@ -190,6 +190,22 @@ def scheda_associato_ui():
             email = gr.Textbox(label="Email", interactive=False)
             telefono = gr.Textbox(label="Telefono", interactive=False)
             stato_assoc = gr.Textbox(label="Stato", interactive=False)
+        with gr.Row():
+            anagrafica_update_btn = gr.Button("✏️ Aggiorna Anagrafica", variant="secondary", size="sm")
+    
+    # Modal per aggiornamento anagrafica
+    with gr.Group(visible=False) as anagrafica_modal:
+        gr.Markdown("### 📝 Aggiorna Dati Anagrafici")
+        with gr.Row():
+            anagrafica_modal_nome = gr.Textbox(label="Nome *", placeholder="Mario")
+            anagrafica_modal_cognome = gr.Textbox(label="Cognome *", placeholder="Rossi")
+            anagrafica_modal_cf = gr.Textbox(label="Codice Fiscale *", placeholder="RSSMRA80A01H501Z", max_lines=1)
+        with gr.Row():
+            anagrafica_modal_email = gr.Textbox(label="Email", placeholder="mario.rossi@email.com")
+            anagrafica_modal_telefono = gr.Textbox(label="Telefono", placeholder="+39 123 456 7890")
+        with gr.Row():
+            anagrafica_save_btn = gr.Button("💾 Salva", variant="primary")
+            anagrafica_cancel_btn = gr.Button("❌ Annulla", variant="secondary")
     
     with gr.Group():
         gr.Markdown("#### ⛵ Tessera FIV")
@@ -461,6 +477,59 @@ def scheda_associato_ui():
             gr.Warning(f"Errore: {str(e)}")
             return gr.Group(visible=True), numero, scad_tess, scad_cert, "", "", "", ""
     
+    def show_anagrafica_modal(aid, current_nome, current_cognome, current_cf, current_email, current_telefono):
+        """Mostra modal per aggiornare anagrafica con dati esistenti"""
+        if not aid:
+            gr.Warning("Seleziona prima un associato")
+            return gr.Group(visible=False), "", "", "", "", ""
+        return gr.Group(visible=True), current_nome, current_cognome, current_cf, current_email, current_telefono
+    
+    def hide_anagrafica_modal():
+        """Nasconde modal anagrafica"""
+        return gr.Group(visible=False), "", "", "", "", ""
+    
+    def save_anagrafica(aid, nome_val, cognome_val, cf_val, email_val, telefono_val):
+        """Salva anagrafica aggiornata"""
+        if not aid:
+            gr.Warning("Nessun associato selezionato")
+            return gr.Group(visible=True), nome_val, cognome_val, cf_val, email_val, telefono_val, "", "", "", "", "", ""
+        
+        if not nome_val or not cognome_val or not cf_val:
+            gr.Warning("Nome, Cognome e Codice Fiscale sono obbligatori")
+            return gr.Group(visible=True), nome_val, cognome_val, cf_val, email_val, telefono_val, "", "", "", "", "", ""
+        
+        # Validazione codice fiscale
+        if len(cf_val.strip()) != 16:
+            gr.Warning("Il codice fiscale deve essere di 16 caratteri")
+            return gr.Group(visible=True), nome_val, cognome_val, cf_val, email_val, telefono_val, "", "", "", "", "", ""
+        
+        try:
+            # Prepara i dati per l'API
+            anagrafica_data = {
+                "nome": nome_val.strip(),
+                "cognome": cognome_val.strip(),
+                "codice_fiscale": cf_val.strip().upper(),
+                "email": email_val.strip() if email_val else "",
+                "telefono": telefono_val.strip() if telefono_val else ""
+            }
+            
+            # Chiama l'API per aggiornare l'anagrafica
+            result = api_client.update_associato(int(aid), anagrafica_data)
+            
+            if result:
+                gr.Info("Anagrafica aggiornata con successo!")
+                return (gr.Group(visible=False), "", "", "", "", "", 
+                       anagrafica_data["nome"], anagrafica_data["cognome"], 
+                       anagrafica_data["codice_fiscale"], anagrafica_data["email"], 
+                       anagrafica_data["telefono"], "Attivo")
+            else:
+                gr.Warning("Errore durante l'aggiornamento dell'anagrafica")
+                return gr.Group(visible=True), nome_val, cognome_val, cf_val, email_val, telefono_val, "", "", "", "", "", ""
+                
+        except Exception as e:
+            gr.Warning(f"Errore: {str(e)}")
+            return gr.Group(visible=True), nome_val, cognome_val, cf_val, email_val, telefono_val, "", "", "", "", "", ""
+    
     load_btn.click(
         load_associato, 
         [associato_id], 
@@ -494,6 +563,30 @@ def scheda_associato_ui():
         [associato_id, fiv_modal_numero, fiv_modal_scad_tess, fiv_modal_scad_cert],
         [fiv_modal, fiv_modal_numero, fiv_modal_scad_tess, fiv_modal_scad_cert,
          fiv_numero, fiv_scadenza_tesseramento, fiv_scadenza_certificato, fiv_status]
+    )
+    
+    # Click handlers per gestione anagrafica
+    anagrafica_update_btn.click(
+        show_anagrafica_modal,
+        [associato_id, nome, cognome, cf, email, telefono],
+        [anagrafica_modal, anagrafica_modal_nome, anagrafica_modal_cognome, 
+         anagrafica_modal_cf, anagrafica_modal_email, anagrafica_modal_telefono]
+    )
+    
+    anagrafica_cancel_btn.click(
+        hide_anagrafica_modal,
+        [],
+        [anagrafica_modal, anagrafica_modal_nome, anagrafica_modal_cognome, 
+         anagrafica_modal_cf, anagrafica_modal_email, anagrafica_modal_telefono]
+    )
+    
+    anagrafica_save_btn.click(
+        save_anagrafica,
+        [associato_id, anagrafica_modal_nome, anagrafica_modal_cognome, 
+         anagrafica_modal_cf, anagrafica_modal_email, anagrafica_modal_telefono],
+        [anagrafica_modal, anagrafica_modal_nome, anagrafica_modal_cognome, 
+         anagrafica_modal_cf, anagrafica_modal_email, anagrafica_modal_telefono,
+         nome, cognome, cf, email, telefono, stato_assoc]
     )
 
 def elenco_fornitori_ui():
