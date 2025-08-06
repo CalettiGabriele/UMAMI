@@ -600,6 +600,19 @@ def elenco_fornitori_ui():
     
     fornitori_table = gr.DataFrame(interactive=False)
     
+    # Modal per nuovo fornitore
+    with gr.Group(visible=False) as nuovo_fornitore_modal:
+        gr.Markdown("### 🏢 Nuovo Fornitore")
+        with gr.Row():
+            fornitore_modal_ragione_sociale = gr.Textbox(label="Ragione Sociale *", placeholder="Es: Azienda SRL")
+            fornitore_modal_partita_iva = gr.Textbox(label="Partita IVA *", placeholder="12345678901", max_lines=1)
+        with gr.Row():
+            fornitore_modal_email = gr.Textbox(label="Email *", placeholder="info@azienda.it")
+            fornitore_modal_telefono = gr.Textbox(label="Telefono *", placeholder="+39 123 456 7890")
+        with gr.Row():
+            fornitore_save_btn = gr.Button("💾 Salva", variant="primary")
+            fornitore_cancel_btn = gr.Button("❌ Annulla", variant="secondary")
+    
     def load_fornitori(search_val):
         try:
             df = api_client.get_fornitori(search=search_val)
@@ -608,7 +621,82 @@ def elenco_fornitori_ui():
             gr.Warning(f"Errore: {e}")
             return pd.DataFrame()
     
+    def show_nuovo_fornitore_modal():
+        """Mostra modal per nuovo fornitore"""
+        return gr.Group(visible=True), "", "", "", ""
+    
+    def hide_nuovo_fornitore_modal():
+        """Nasconde modal nuovo fornitore"""
+        return gr.Group(visible=False), "", "", "", ""
+    
+    def save_nuovo_fornitore(ragione_sociale, partita_iva, email, telefono):
+        """Salva nuovo fornitore"""
+        # Validazione campi obbligatori
+        if not ragione_sociale or not partita_iva or not email or not telefono:
+            gr.Warning("Tutti i campi sono obbligatori")
+            return gr.Group(visible=True), ragione_sociale, partita_iva, email, telefono, pd.DataFrame()
+        
+        # Validazione partita IVA (deve essere 11 caratteri)
+        if len(partita_iva.strip()) != 11 or not partita_iva.strip().isdigit():
+            gr.Warning("La partita IVA deve essere di 11 cifre")
+            return gr.Group(visible=True), ragione_sociale, partita_iva, email, telefono, pd.DataFrame()
+        
+        # Validazione email basica
+        if "@" not in email or "." not in email:
+            gr.Warning("Inserisci un'email valida")
+            return gr.Group(visible=True), ragione_sociale, partita_iva, email, telefono, pd.DataFrame()
+        
+        try:
+            # Prepara i dati per l'API
+            fornitore_data = {
+                "ragione_sociale": ragione_sociale.strip(),
+                "partita_iva": partita_iva.strip(),
+                "email": email.strip(),
+                "telefono": telefono.strip()
+            }
+            
+            # Chiama l'API per creare il fornitore
+            result = api_client.create_fornitore(fornitore_data)
+            
+            if result:
+                gr.Info(f"Fornitore '{ragione_sociale}' creato con successo!")
+                # Ricarica la tabella fornitori
+                updated_df = api_client.get_fornitori()
+                return (gr.Group(visible=False), "", "", "", "", 
+                       updated_df if not updated_df.empty else pd.DataFrame())
+            else:
+                gr.Warning("Errore durante la creazione del fornitore")
+                return gr.Group(visible=True), ragione_sociale, partita_iva, email, telefono, pd.DataFrame()
+                
+        except Exception as e:
+            gr.Warning(f"Errore: {str(e)}")
+            return gr.Group(visible=True), ragione_sociale, partita_iva, email, telefono, pd.DataFrame()
+    
     refresh_btn.click(load_fornitori, [search], fornitori_table)
+    
+    # Click handlers per nuovo fornitore
+    nuovo_btn.click(
+        show_nuovo_fornitore_modal,
+        [],
+        [nuovo_fornitore_modal, fornitore_modal_ragione_sociale, fornitore_modal_partita_iva, 
+         fornitore_modal_email, fornitore_modal_telefono]
+    )
+    
+    fornitore_cancel_btn.click(
+        hide_nuovo_fornitore_modal,
+        [],
+        [nuovo_fornitore_modal, fornitore_modal_ragione_sociale, fornitore_modal_partita_iva, 
+         fornitore_modal_email, fornitore_modal_telefono]
+    )
+    
+    fornitore_save_btn.click(
+        save_nuovo_fornitore,
+        [fornitore_modal_ragione_sociale, fornitore_modal_partita_iva, 
+         fornitore_modal_email, fornitore_modal_telefono],
+        [nuovo_fornitore_modal, fornitore_modal_ragione_sociale, fornitore_modal_partita_iva, 
+         fornitore_modal_email, fornitore_modal_telefono, fornitori_table]
+    )
+    
     return fornitori_table
 
 def scheda_fornitore_ui():
