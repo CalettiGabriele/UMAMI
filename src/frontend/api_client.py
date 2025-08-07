@@ -91,8 +91,20 @@ def get_servizi_fisici(tipo="", stato=""):
         return pd.DataFrame(data['results'])
     return pd.DataFrame()
 
+def get_servizio_fisico(servizio_id):
+    return _request("GET", f"/servizi-fisici/{servizio_id}")
+
 def create_servizio_fisico(servizio_data):
     return _request("POST", "/servizi-fisici", json=servizio_data)
+
+def update_servizio_fisico(servizio_id, servizio_data):
+    return _request("PUT", f"/servizi-fisici/{servizio_id}", json=servizio_data)
+
+def assign_servizio_fisico(servizio_id, assegnazione_data):
+    return _request("POST", f"/servizi-fisici/{servizio_id}/assegnazioni", json=assegnazione_data)
+
+def update_assegnazione_servizio_fisico(assegnazione_id, assegnazione_data):
+    return _request("PUT", f"/assegnazioni-servizi-fisici/{assegnazione_id}", json=assegnazione_data)
 
 # --- Report ---
 def get_report_soci_morosi(giorni_scadenza=0, importo_minimo=None, include_sospesi=False):
@@ -150,12 +162,13 @@ def get_prezzo_servizio(prezzo_id):
     return _request("GET", f"/prezzi-servizi/{prezzo_id}")
 
 # --- Fatture ---
-def get_fatture(tipo="", stato="", search="", associato_id=None):
+def get_fatture(tipo="", stato="", search="", associato_id=None, fornitore_id=None):
     params = {}
     if tipo: params['tipo'] = tipo
     if stato: params['stato'] = stato
     if search: params['search'] = search
     if associato_id: params['associato_id'] = associato_id
+    if fornitore_id: params['fornitore_id'] = fornitore_id
     data = _request("GET", "/fatture", params=params)
     if data and isinstance(data, list):
         return pd.DataFrame(data)

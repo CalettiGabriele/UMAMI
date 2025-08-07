@@ -122,6 +122,13 @@ class AssegnazioneServizioCreate(BaseModel):
     anno_competenza: int
     stato: str = Field("Attivo", pattern="^(Attivo|Sospeso|Terminato)$")
 
+class AssegnazioneServizioUpdate(BaseModel):
+    fk_associato: Optional[int] = None
+    data_inizio: Optional[date] = None
+    data_fine: Optional[date] = None
+    anno_competenza: Optional[int] = None
+    stato: Optional[str] = Field(None, pattern="^(Attivo|Sospeso|Terminato)$")
+
 class PrestazioneCreate(BaseModel):
     nome_prestazione: str = Field(..., min_length=1, max_length=100)
     descrizione: str = Field(..., max_length=500)
@@ -1048,6 +1055,47 @@ async def create_assegnazione_servizio_endpoint(
         raise
     except Exception as e:
         logger.error(f"Error in create_assegnazione_servizio: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/assegnazioni-servizi-fisici/{assegnazione_id}", summary="Aggiorna assegnazione servizio fisico")
+async def update_assegnazione_servizio_endpoint(
+    assegnazione_id: int = Path(..., description="ID dell'assegnazione"),
+    assegnazione: AssegnazioneServizioUpdate = Body(...)
+):
+    """Aggiorna un'assegnazione di servizio fisico esistente"""
+    try:
+        # Check if assegnazione exists
+        check_query = "SELECT * FROM AssegnazioniServiziFisici WHERE id_assegnazione = ?"
+        existing = execute_query(check_query, (assegnazione_id,), fetch_one=True)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Assegnazione non trovata")
+        
+        # Build update query dynamically
+        update_data = assegnazione.model_dump(exclude_unset=True)
+        if not update_data:
+            raise HTTPException(status_code=400, detail="Nessun campo da aggiornare")
+        
+        # Convert dates to ISO format if present
+        if 'data_inizio' in update_data and update_data['data_inizio']:
+            update_data['data_inizio'] = update_data['data_inizio'].isoformat()
+        if 'data_fine' in update_data and update_data['data_fine']:
+            update_data['data_fine'] = update_data['data_fine'].isoformat()
+        
+        set_clauses = [f"{key} = ?" for key in update_data.keys()]
+        update_query = f"UPDATE AssegnazioniServiziFisici SET {', '.join(set_clauses)} WHERE id_assegnazione = ?"
+        
+        params = list(update_data.values()) + [assegnazione_id]
+        execute_query(update_query, tuple(params), fetch_all=False)
+        
+        # Return updated assegnazione
+        return_query = "SELECT * FROM AssegnazioniServiziFisici WHERE id_assegnazione = ?"
+        result = execute_query(return_query, (assegnazione_id,), fetch_one=True)
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in update_assegnazione_servizio: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ===== ENDPOINTS SERVIZI PRESTAZIONALI =====
