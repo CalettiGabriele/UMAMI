@@ -9,6 +9,7 @@ Implementa tutti gli endpoint descritti nella specifica API.
 
 from fastapi import FastAPI, HTTPException, Query, Path, Body, Depends
 from fastapi.responses import JSONResponse
+from datetime import datetime
 from pydantic import BaseModel, Field, EmailStr
 from typing import Optional, List, Dict, Any
 from datetime import date, datetime
@@ -1273,6 +1274,58 @@ async def list_erogazioni_prestazioni(
         
     except Exception as e:
         logger.error(f"Error in list_erogazioni_prestazioni: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/erogazioni-prestazioni", status_code=201, summary="Crea erogazione prestazione")
+async def create_erogazione_prestazione(payload: dict):
+    """Crea una nuova erogazione di prestazione.
+    Richiede: fk_associato (int), fk_prestazione (int), data_erogazione (str opzionale: YYYY-MM-DD o ISO datetime)
+    """
+    try:
+        fk_associato = payload.get("fk_associato")
+        fk_prestazione = payload.get("fk_prestazione")
+        data_erogazione = payload.get("data_erogazione")
+
+        if not fk_associato or not fk_prestazione:
+            raise HTTPException(status_code=400, detail="fk_associato e fk_prestazione sono obbligatori")
+
+        # Validate associato
+        assoc = execute_query("SELECT id_associato FROM Associati WHERE id_associato = ?", (fk_associato,), fetch_one=True)
+        if not assoc:
+            raise HTTPException(status_code=404, detail="Associato non trovato")
+
+        # Validate prestazione
+        prest = execute_query("SELECT id_prestazione FROM Prestazioni WHERE id_prestazione = ?", (fk_prestazione,), fetch_one=True)
+        if not prest:
+            raise HTTPException(status_code=404, detail="Prestazione non trovata")
+
+        # Parse/normalize date
+        if data_erogazione and isinstance(data_erogazione, str) and data_erogazione.strip():
+            # Accept YYYY-MM-DD or full ISO
+            try:
+                if len(data_erogazione.strip()) == 10:
+                    # date only
+                    dt = datetime.strptime(data_erogazione.strip(), "%Y-%m-%d")
+                    data_erogazione_norm = dt.strftime("%Y-%m-%d 00:00:00")
+                else:
+                    dt = datetime.fromisoformat(data_erogazione.strip().replace("Z", ""))
+                    data_erogazione_norm = dt.strftime("%Y-%m-%d %H:%M:%S")
+            except Exception:
+                raise HTTPException(status_code=400, detail="Formato data_erogazione non valido")
+        else:
+            data_erogazione_norm = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        insert_q = (
+            "INSERT INTO ErogazioniPrestazioni (fk_associato, fk_prestazione, data_erogazione) "
+            "VALUES (?, ?, ?)"
+        )
+        execute_query(insert_q, (fk_associato, fk_prestazione, data_erogazione_norm), fetch_all=False)
+
+        return {"status": "created"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in create_erogazione_prestazione: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ===== ENDPOINTS REPORT =====

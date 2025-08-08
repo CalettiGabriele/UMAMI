@@ -35,6 +35,9 @@ def get_associati(search="", stato="", tesserato_fiv=None):
         return pd.DataFrame(data['results'])
     return pd.DataFrame()
 
+def create_erogazione_prestazione(erogazione_data):
+    return _request("POST", "/erogazioni-prestazioni", json=erogazione_data)
+
 def get_associato(associato_id):
     return _request("GET", f"/associati/{associato_id}")
 

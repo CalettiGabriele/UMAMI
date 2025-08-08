@@ -1580,6 +1580,7 @@ def elenco_prestazioni_erogate_ui():
         data_da = gr.Textbox(label="📅 Data Da", placeholder="YYYY-MM-DD")
         data_a = gr.Textbox(label="📅 Data A", placeholder="YYYY-MM-DD")
         refresh_btn = gr.Button("🔄 Aggiorna", variant="secondary")
+        nuovo_erog_btn = gr.Button("➕ Nuova Erogazione", variant="primary")
     
     erogazioni_table = gr.DataFrame(interactive=False)
     
@@ -1606,11 +1607,103 @@ def elenco_prestazioni_erogate_ui():
             gr.Warning(f"Errore: {e}")
             return pd.DataFrame()
     
+    # --- Modal / Form Nuova Erogazione (in-scope) ---
+    with gr.Group(visible=False) as nuova_erogazione_group:
+        gr.Markdown("#### ➕ Nuova Erogazione Prestazione")
+        with gr.Row():
+            erog_associato_id_input = gr.Number(label="ID Associato", precision=0)
+            erog_prestazione_dropdown = gr.Dropdown(label="Prestazione", choices=[], allow_custom_value=False)
+            erog_data_input = gr.Textbox(label="Data Erogazione", placeholder="YYYY-MM-DD (opzionale, default: oggi)")
+        with gr.Row():
+            erog_cancel_btn = gr.Button("Annulla", variant="secondary")
+            erog_save_btn = gr.Button("Salva", variant="primary")
+
+    def open_nuova_erogazione():
+        try:
+            dfp = api_client.get_prestazioni("")
+            opts = []
+            if dfp is not None and len(dfp) > 0:
+                for _, row in dfp.iterrows():
+                    try:
+                        pid = int(row.get("id_prestazione"))
+                        label = row.get("nome_prestazione") or ""
+                        opts.append(f"{pid} - {label}")
+                    except Exception:
+                        continue
+            return (
+                gr.update(visible=True),
+                gr.update(choices=opts, value=None),
+                gr.update(value=None),
+                gr.update(value="")
+            )
+        except Exception as e:
+            gr.Warning(f"Errore nel caricamento prestazioni: {e}")
+            return gr.update(visible=True), gr.update(choices=[], value=None), gr.update(value=None), gr.update(value="")
+
+    def cancel_nuova_erogazione():
+        return (
+            gr.update(visible=False),
+            gr.update(value=None),
+            gr.update(value=None),
+            gr.update(value="")
+        )
+
+    def save_nuova_erogazione(ass_id_val, prest_choice, data_val, f_associato, f_text, f_da, f_a):
+        try:
+            payload = {}
+            if ass_id_val is None or not str(ass_id_val).strip() or float(ass_id_val) <= 0:
+                raise ValueError("Specificare un ID Associato valido")
+            payload["fk_associato"] = int(float(ass_id_val))
+
+            if not prest_choice or not str(prest_choice).strip():
+                raise ValueError("Selezionare una prestazione")
+            try:
+                payload["fk_prestazione"] = int(str(prest_choice).split(" - ")[0])
+            except Exception:
+                raise ValueError("Prestazione selezionata non valida")
+
+            data_clean = data_val.strip() if data_val and str(data_val).strip() else None
+            if data_clean:
+                payload["data_erogazione"] = data_clean
+
+            api_client.create_erogazione_prestazione(payload)
+            gr.Info("Erogazione creata con successo")
+
+            df = load_erogazioni(f_associato, f_text, f_da, f_a)
+            return (
+                gr.update(visible=False),
+                gr.update(value=None),
+                gr.update(value=None),
+                gr.update(value=""),
+                df if df is not None else pd.DataFrame()
+            )
+        except Exception as e:
+            gr.Warning(f"Errore nel salvataggio: {e}")
+            return gr.update(visible=True), gr.update(), gr.update(), gr.update(), gr.update()
+
     # Event handlers
     refresh_btn.click(
         load_erogazioni,
         inputs=[associato_search, text_search, data_da, data_a], 
         outputs=erogazioni_table
+    )
+
+    nuovo_erog_btn.click(
+        open_nuova_erogazione,
+        inputs=[],
+        outputs=[nuova_erogazione_group, erog_prestazione_dropdown, erog_associato_id_input, erog_data_input]
+    )
+
+    erog_cancel_btn.click(
+        cancel_nuova_erogazione,
+        inputs=[],
+        outputs=[nuova_erogazione_group, erog_associato_id_input, erog_prestazione_dropdown, erog_data_input]
+    )
+
+    erog_save_btn.click(
+        save_nuova_erogazione,
+        inputs=[erog_associato_id_input, erog_prestazione_dropdown, erog_data_input, associato_search, text_search, data_da, data_a],
+        outputs=[nuova_erogazione_group, erog_associato_id_input, erog_prestazione_dropdown, erog_data_input, erogazioni_table]
     )
     
     # Carica erogazioni all'avvio (tutte)
