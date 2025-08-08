@@ -9,10 +9,10 @@ Implementa tutti gli endpoint descritti nella specifica API.
 
 from fastapi import FastAPI, HTTPException, Query, Path, Body, Depends
 from fastapi.responses import JSONResponse
-from datetime import datetime
+from datetime import datetime, timedelta
 from pydantic import BaseModel, Field, EmailStr
 from typing import Optional, List, Dict, Any
-from datetime import date, datetime
+from datetime import date
 import logging
 import sqlite3
 import os
@@ -1295,7 +1295,7 @@ async def create_erogazione_prestazione(payload: dict):
             raise HTTPException(status_code=404, detail="Associato non trovato")
 
         # Validate prestazione
-        prest = execute_query("SELECT id_prestazione FROM Prestazioni WHERE id_prestazione = ?", (fk_prestazione,), fetch_one=True)
+        prest = execute_query("SELECT id_prestazione, nome_prestazione, costo FROM Prestazioni WHERE id_prestazione = ?", (fk_prestazione,), fetch_one=True)
         if not prest:
             raise HTTPException(status_code=404, detail="Prestazione non trovata")
 
@@ -1315,13 +1315,91 @@ async def create_erogazione_prestazione(payload: dict):
         else:
             data_erogazione_norm = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        insert_q = (
-            "INSERT INTO ErogazioniPrestazioni (fk_associato, fk_prestazione, data_erogazione) "
-            "VALUES (?, ?, ?)"
-        )
-        execute_query(insert_q, (fk_associato, fk_prestazione, data_erogazione_norm), fetch_all=False)
+        # Begin transaction to insert erogazione, fattura, dettaglio fattura
+        conn = get_db_connection()
+        try:
+            cur = conn.cursor()
 
-        return {"status": "created"}
+            # 1) Insert ErogazionePrestazione
+            insert_erog = (
+                "INSERT INTO ErogazioniPrestazioni (fk_associato, fk_prestazione, data_erogazione) "
+                "VALUES (?, ?, ?)"
+            )
+            cur.execute(insert_erog, (fk_associato, fk_prestazione, data_erogazione_norm))
+            id_erogazione = cur.lastrowid
+
+            # 2) Create Fattura (Attiva) for this erogazione
+            costo = float(prest.get("costo") or 0.0)
+            imponibile = costo
+            iva = 0.00  # IVA non gestita per ora; aggiornabile in futuro
+            totale = imponibile + iva
+
+            today = date.today()
+            scadenza = today + timedelta(days=30)
+            numero_fattura = f"EP-{fk_associato}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+            # Ensure numero_fattura uniqueness (best-effort: retry suffix if collision)
+            attempt = 0
+            while True:
+                check = cur.execute("SELECT 1 FROM Fatture WHERE numero_fattura = ?", (numero_fattura,)).fetchone()
+                if not check:
+                    break
+                attempt += 1
+                numero_fattura = f"EP-{fk_associato}-{datetime.now().strftime('%Y%m%d%H%M%S')}-{attempt}"
+
+            insert_fatt = (
+                """
+                INSERT INTO Fatture (
+                    numero_fattura, data_emissione, data_scadenza, fk_associato,
+                    fk_fornitore, tipo_fattura, importo_imponibile, importo_iva,
+                    importo_totale, stato
+                ) VALUES (?, ?, ?, ?, NULL, 'Attiva', ?, ?, ?, 'Emessa')
+                """
+            )
+            cur.execute(
+                insert_fatt,
+                (
+                    numero_fattura,
+                    today.strftime("%Y-%m-%d"),
+                    scadenza.strftime("%Y-%m-%d"),
+                    fk_associato,
+                    imponibile,
+                    iva,
+                    totale,
+                ),
+            )
+            id_fattura = cur.lastrowid
+
+            # 3) Insert DettaglioFattura linked to erogazione
+            descr = f"{prest['nome_prestazione']} (erogazione {id_erogazione})"
+            insert_det = (
+                """
+                INSERT INTO DettagliFatture (
+                    fk_fattura, descrizione, quantita, prezzo_unitario, importo_totale,
+                    fk_assegnazione_servizio_fisico, fk_erogazione_servizio_prestazionale
+                ) VALUES (?, ?, ?, ?, ?, NULL, ?)
+                """
+            )
+            cur.execute(
+                insert_det,
+                (
+                    id_fattura,
+                    descr,
+                    1.0,
+                    costo,
+                    costo,
+                    id_erogazione,
+                ),
+            )
+
+            conn.commit()
+            return {"status": "created", "id_erogazione": id_erogazione, "id_fattura": id_fattura, "numero_fattura": numero_fattura}
+        except Exception as inner_e:
+            conn.rollback()
+            logger.error(f"Transaction error in create_erogazione_prestazione: {inner_e}")
+            raise HTTPException(status_code=500, detail=str(inner_e))
+        finally:
+            conn.close()
     except HTTPException:
         raise
     except Exception as e:
