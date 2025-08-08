@@ -990,10 +990,10 @@ async def create_assegnazione_servizio_endpoint(
 ):
     """Assegna un servizio fisico a un socio"""
     try:
-        # Check if servizio exists
-        servizio_query = "SELECT id_servizio_fisico FROM ServiziFisici WHERE id_servizio_fisico = ?"
-        servizio_exists = execute_query(servizio_query, (servizio_id,), fetch_one=True)
-        if not servizio_exists:
+        # Check if servizio exists and get details
+        servizio_query = "SELECT id_servizio_fisico, nome, categoria FROM ServiziFisici WHERE id_servizio_fisico = ?"
+        servizio_row = execute_query(servizio_query, (servizio_id,), fetch_one=True)
+        if not servizio_row:
             raise HTTPException(status_code=404, detail="Servizio fisico non trovato")
         
         # Check if associato exists
@@ -1017,36 +1017,114 @@ async def create_assegnazione_servizio_endpoint(
         if overlap_exists:
             raise HTTPException(status_code=400, detail="Servizio già assegnato nel periodo specificato")
         
-        # Insert new assegnazione
-        insert_query = """
-        INSERT INTO AssegnazioniServiziFisici (fk_servizio_fisico, fk_associato, data_inizio, data_fine, anno_competenza, stato)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """
-        
-        params = (
-            servizio_id,
-            assegnazione.fk_associato,
-            assegnazione.data_inizio.isoformat(),
-            assegnazione.data_fine.isoformat(),
-            assegnazione.anno_competenza,
-            assegnazione.stato
+        # Compute prezzo for the service category
+        prezzo_row = execute_query(
+            "SELECT costo FROM PrezziServizi WHERE id_categoria_servizio = ?",
+            (servizio_row["categoria"],),
+            fetch_one=True,
         )
-        
+        costo = float(prezzo_row.get("costo") if prezzo_row else 0.0)
+
+        # Transaction: create assegnazione, set servizio Occupato, create fattura + dettaglio
         conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(insert_query, params)
-        new_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-        
-        # Update servizio status to Occupato
-        update_status_query = "UPDATE ServiziFisici SET stato = 'Occupato' WHERE id_servizio_fisico = ?"
-        execute_query(update_status_query, (servizio_id,), fetch_all=False)
-        
-        # Return created assegnazione
-        return_query = "SELECT * FROM AssegnazioniServiziFisici WHERE id_assegnazione = ?"
-        result = execute_query(return_query, (new_id,), fetch_one=True)
-        return result
+        try:
+            cur = conn.cursor()
+
+            # 1) Insert new assegnazione
+            insert_query = """
+            INSERT INTO AssegnazioniServiziFisici (fk_servizio_fisico, fk_associato, data_inizio, data_fine, anno_competenza, stato)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """
+            cur.execute(
+                insert_query,
+                (
+                    servizio_id,
+                    assegnazione.fk_associato,
+                    assegnazione.data_inizio.isoformat(),
+                    assegnazione.data_fine.isoformat(),
+                    assegnazione.anno_competenza,
+                    assegnazione.stato,
+                ),
+            )
+            new_id = cur.lastrowid
+
+            # 2) Update servizio status to Occupato
+            cur.execute("UPDATE ServiziFisici SET stato = 'Occupato' WHERE id_servizio_fisico = ?", (servizio_id,))
+
+            # 3) Create Fattura (Attiva)
+            imponibile = costo
+            iva = 0.00  # IVA management can be added later
+            totale = imponibile + iva
+            today = date.today()
+            scadenza = today + timedelta(days=30)
+            numero_fattura = f"SF-{assegnazione.fk_associato}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+            attempt = 0
+            while True:
+                check = cur.execute("SELECT 1 FROM Fatture WHERE numero_fattura = ?", (numero_fattura,)).fetchone()
+                if not check:
+                    break
+                attempt += 1
+                numero_fattura = f"SF-{assegnazione.fk_associato}-{datetime.now().strftime('%Y%m%d%H%M%S')}-{attempt}"
+
+            cur.execute(
+                """
+                INSERT INTO Fatture (
+                    numero_fattura, data_emissione, data_scadenza, fk_associato,
+                    fk_fornitore, tipo_fattura, importo_imponibile, importo_iva, importo_totale, stato
+                ) VALUES (?, ?, ?, ?, NULL, 'Attiva', ?, ?, ?, 'Emessa')
+                """,
+                (
+                    numero_fattura,
+                    today.strftime("%Y-%m-%d"),
+                    scadenza.strftime("%Y-%m-%d"),
+                    assegnazione.fk_associato,
+                    imponibile,
+                    iva,
+                    totale,
+                ),
+            )
+            id_fattura = cur.lastrowid
+
+            # 4) Create DettaglioFattura linked to this assegnazione
+            descr = (
+                f"Assegnazione {servizio_row['nome']} (servizio {servizio_id}) "
+                f"dal {assegnazione.data_inizio.isoformat()} al {assegnazione.data_fine.isoformat()}"
+            )
+            cur.execute(
+                """
+                INSERT INTO DettagliFatture (
+                    fk_fattura, descrizione, quantita, prezzo_unitario, importo_totale,
+                    fk_assegnazione_servizio_fisico, fk_erogazione_servizio_prestazionale
+                ) VALUES (?, ?, ?, ?, ?, ?, NULL)
+                """,
+                (
+                    id_fattura,
+                    descr,
+                    1.0,
+                    costo,
+                    costo,
+                    new_id,
+                ),
+            )
+
+            conn.commit()
+
+            # Return created assegnazione plus invoice info
+            created = execute_query("SELECT * FROM AssegnazioniServiziFisici WHERE id_assegnazione = ?", (new_id,), fetch_one=True)
+            created = dict(created)
+            created.update({
+                "id_fattura": id_fattura,
+                "numero_fattura": numero_fattura,
+                "importo_totale": totale,
+            })
+            return created
+        except Exception as inner_e:
+            conn.rollback()
+            logger.error(f"Transaction error in create_assegnazione_servizio: {inner_e}")
+            raise HTTPException(status_code=500, detail=str(inner_e))
+        finally:
+            conn.close()
         
     except HTTPException:
         raise
@@ -1329,7 +1407,7 @@ async def create_erogazione_prestazione(payload: dict):
             id_erogazione = cur.lastrowid
 
             # 2) Create Fattura (Attiva) for this erogazione
-            costo = float(prest.get("costo") or 0.0)
+            costo = float(prest["costo"]) if prest and prest["costo"] is not None else 0.0
             imponibile = costo
             iva = 0.00  # IVA non gestita per ora; aggiornabile in futuro
             totale = imponibile + iva
