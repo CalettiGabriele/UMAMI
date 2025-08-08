@@ -132,16 +132,12 @@ class AssegnazioneServizioUpdate(BaseModel):
 class PrestazioneCreate(BaseModel):
     nome_prestazione: str = Field(..., min_length=1, max_length=100)
     descrizione: str = Field(..., max_length=500)
-    tipo: str = Field(..., max_length=50)
-    durata_ore: Optional[int] = Field(None, ge=1)
-    max_partecipanti: Optional[int] = Field(None, ge=1)
+    costo: Optional[float] = Field(0.0, ge=0)
 
 class PrestazioneUpdate(BaseModel):
     nome_prestazione: Optional[str] = Field(None, min_length=1, max_length=100)
     descrizione: Optional[str] = Field(None, max_length=500)
-    tipo: Optional[str] = Field(None, max_length=50)
-    durata_ore: Optional[int] = Field(None, ge=1)
-    max_partecipanti: Optional[int] = Field(None, ge=1)
+    costo: Optional[float] = Field(None, ge=0)
 
 class ErogazioneCreate(BaseModel):
     fk_associato: int
@@ -1102,25 +1098,24 @@ async def update_assegnazione_servizio_endpoint(
 
 @app.get("/servizi-prestazionali", summary="Lista servizi prestazionali")
 async def list_servizi_prestazionali(
-    tipo: Optional[str] = Query(None, description="Filtra per tipo di servizio"),
-    attivo: Optional[bool] = Query(None, description="Filtra per servizi attivi")
+    search: Optional[str] = Query(None, description="Cerca per nome prestazione")
 ):
     """Recupera la lista dei servizi prestazionali"""
     try:
         where_clauses = []
         params = []
         
-        if tipo:
-            where_clauses.append("tipo = ?")
-            params.append(tipo)
+        if search:
+            where_clauses.append("nome_prestazione LIKE ?")
+            params.append(f"%{search}%")
         
         where_clause = " AND ".join(where_clauses) if where_clauses else "1=1"
         
         query = f"""
-        SELECT id_prestazione, nome_prestazione, descrizione, tipo, durata_ore, max_partecipanti
+        SELECT id_prestazione, nome_prestazione, descrizione, costo
         FROM Prestazioni 
         WHERE {where_clause}
-        ORDER BY tipo, nome_prestazione
+        ORDER BY nome_prestazione
         """
         
         results = execute_query(query, tuple(params))
@@ -1138,16 +1133,14 @@ async def create_servizio_prestazionale_endpoint(prestazione: PrestazioneCreate)
     """Crea un nuovo servizio prestazionale"""
     try:
         insert_query = """
-        INSERT INTO Prestazioni (nome_prestazione, descrizione, tipo, durata_ore, max_partecipanti)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO Prestazioni (nome_prestazione, descrizione, costo)
+        VALUES (?, ?, ?)
         """
         
         params = (
             prestazione.nome_prestazione,
             prestazione.descrizione,
-            prestazione.tipo,
-            prestazione.durata_ore,
-            prestazione.max_partecipanti
+            prestazione.costo
         )
         
         conn = get_db_connection()
@@ -1216,6 +1209,70 @@ async def update_servizio_prestazionale_endpoint(
         raise
     except Exception as e:
         logger.error(f"Error in update_servizio_prestazionale: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ===== ENDPOINTS EROGAZIONI PRESTAZIONI =====
+
+@app.get("/erogazioni-prestazioni", summary="Lista erogazioni prestazioni")
+async def list_erogazioni_prestazioni(
+    associato_id: Optional[int] = Query(None, description="Filtra per ID associato"),
+    prestazione_id: Optional[int] = Query(None, description="Filtra per ID prestazione"),
+    data_da: Optional[str] = Query(None, description="Data inizio (YYYY-MM-DD)"),
+    data_a: Optional[str] = Query(None, description="Data fine (YYYY-MM-DD)"),
+    search: Optional[str] = Query(None, description="Ricerca testuale su nome/cognome associato e nome/descrizione prestazione")
+):
+    """Recupera la lista delle erogazioni prestazioni con filtri.
+    Se non sono presenti filtri ID, restituisce tutte le erogazioni. Il parametro `search` filtra sui campi testuali.
+    """
+    try:
+        where_clauses = []
+        params = []
+        
+        if associato_id:
+            where_clauses.append("ep.fk_associato = ?")
+            params.append(associato_id)
+            
+        if prestazione_id:
+            where_clauses.append("ep.fk_prestazione = ?")
+            params.append(prestazione_id)
+            
+        if data_da:
+            where_clauses.append("DATE(ep.data_erogazione) >= ?")
+            params.append(data_da)
+            
+        if data_a:
+            where_clauses.append("DATE(ep.data_erogazione) <= ?")
+            params.append(data_a)
+
+        if search:
+            like = f"%{search}%"
+            where_clauses.append("(a.nome LIKE ? OR a.cognome LIKE ? OR p.nome_prestazione LIKE ? OR p.descrizione LIKE ?)")
+            params.extend([like, like, like, like])
+        
+        where_clause = " AND ".join(where_clauses) if where_clauses else "1=1"
+        
+        query = f"""
+        SELECT 
+            ep.id_erogazione,
+            ep.data_erogazione,
+            a.nome || ' ' || a.cognome as associato_nome,
+            a.id_associato,
+            p.nome_prestazione,
+            p.descrizione,
+            p.costo,
+            p.id_prestazione
+        FROM ErogazioniPrestazioni ep
+        JOIN Associati a ON ep.fk_associato = a.id_associato
+        JOIN Prestazioni p ON ep.fk_prestazione = p.id_prestazione
+        WHERE {where_clause}
+        ORDER BY ep.data_erogazione DESC
+        """
+        
+        result = execute_query(query, tuple(params))
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error in list_erogazioni_prestazioni: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ===== ENDPOINTS REPORT =====

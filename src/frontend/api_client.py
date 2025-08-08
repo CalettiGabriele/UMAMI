@@ -204,3 +204,43 @@ def create_pagamento(pagamento_data):
 
 def get_pagamento(pagamento_id):
     return _request("GET", f"/pagamenti/{pagamento_id}")
+
+# --- Prestazioni ---
+def get_prestazioni(search=""):
+    params = {'search': search} if search else {}
+    data = _request("GET", "/servizi-prestazionali", params=params)
+    if data and isinstance(data, list):
+        return pd.DataFrame(data)
+    elif data and 'results' in data:
+        return pd.DataFrame(data['results'])
+    return pd.DataFrame()
+
+def get_prestazione(prestazione_id):
+    return _request("GET", f"/servizi-prestazionali/{prestazione_id}")
+
+def create_prestazione(prestazione_data):
+    return _request("POST", "/servizi-prestazionali", json=prestazione_data)
+
+def update_prestazione(prestazione_id, prestazione_data):
+    return _request("PUT", f"/servizi-prestazionali/{prestazione_id}", json=prestazione_data)
+
+# --- Erogazioni Prestazioni ---
+def get_erogazioni_prestazioni(associato_id=None, prestazione_id=None, data_da=None, data_a=None, search=None):
+    params = {}
+    if associato_id:
+        params['associato_id'] = associato_id
+    if prestazione_id:
+        params['prestazione_id'] = prestazione_id
+    if data_da:
+        params['data_da'] = data_da
+    if data_a:
+        params['data_a'] = data_a
+    if search:
+        params['search'] = search
+    
+    data = _request("GET", "/erogazioni-prestazioni", params=params)
+    if data and isinstance(data, list):
+        return pd.DataFrame(data)
+    elif data and 'results' in data:
+        return pd.DataFrame(data['results'])
+    return pd.DataFrame()

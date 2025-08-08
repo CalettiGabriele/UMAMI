@@ -187,9 +187,15 @@ def scheda_associato_ui():
             cognome = gr.Textbox(label="Cognome", interactive=False)
             cf = gr.Textbox(label="Codice Fiscale", interactive=False)
         with gr.Row():
+            data_nascita = gr.Textbox(label="Data di Nascita", interactive=False)
+            data_iscrizione = gr.Textbox(label="Data Iscrizione", interactive=False)
+            associato_riferimento = gr.Textbox(label="Associato di Riferimento", interactive=False)
+        with gr.Row():
             email = gr.Textbox(label="Email", interactive=False)
             telefono = gr.Textbox(label="Telefono", interactive=False)
             stato_assoc = gr.Textbox(label="Stato", interactive=False)
+        with gr.Row():
+            indirizzo = gr.Textbox(label="Indirizzo", interactive=False, lines=2)
         with gr.Row():
             anagrafica_update_btn = gr.Button("✏️ Aggiorna Anagrafica", variant="secondary", size="sm")
     
@@ -257,18 +263,33 @@ def scheda_associato_ui():
     
     def load_associato(aid):
         if not aid:
-            return [""] * 13 + [pd.DataFrame(), pd.DataFrame()]
+            return [""] * 22 + [pd.DataFrame(), pd.DataFrame()]
         try:
             # Carica dati associato
             data = api_client.get_associato(int(aid))
             if not data:
                 gr.Warning("Associato non trovato")
-                return [""] * 15 + [pd.DataFrame(), pd.DataFrame()]
+                return [""] * 22 + [pd.DataFrame(), pd.DataFrame()]
             
-            # Dati anagrafici
+            # Dati anagrafici (inclusi i nuovi campi)
+            # Gestione associato di riferimento
+            associato_rif_text = ""
+            fk_associato_rif = safe_get(data, 'fk_associato_riferimento')
+            if fk_associato_rif:
+                try:
+                    rif_data = api_client.get_associato(fk_associato_rif)
+                    if rif_data:
+                        nome_rif = safe_get(rif_data, 'nome', '')
+                        cognome_rif = safe_get(rif_data, 'cognome', '')
+                        associato_rif_text = f"{nome_rif} {cognome_rif} (ID: {fk_associato_rif})".strip()
+                except:
+                    associato_rif_text = f"ID: {fk_associato_rif}"
+            
             anagrafica = [
                 safe_get(data, 'nome'), safe_get(data, 'cognome'), safe_get(data, 'codice_fiscale'),
-                safe_get(data, 'email'), safe_get(data, 'telefono'), safe_get(data, 'stato_associato')
+                safe_get(data, 'data_nascita', ''), safe_get(data, 'data_iscrizione', ''), associato_rif_text,
+                safe_get(data, 'email'), safe_get(data, 'telefono'), safe_get(data, 'stato_associato'),
+                safe_get(data, 'indirizzo', '')
             ]
             
             # Dati FIV
@@ -397,7 +418,7 @@ def scheda_associato_ui():
             
         except Exception as e:
             gr.Warning(f"Errore: {e}")
-            return [""] * 13 + [pd.DataFrame(), pd.DataFrame()]
+            return [""] * 22 + [pd.DataFrame(), pd.DataFrame()]
     
     def show_fiv_modal_create():
         """Mostra modal per creare tessera FIV"""
@@ -533,7 +554,8 @@ def scheda_associato_ui():
     load_btn.click(
         load_associato, 
         [associato_id], 
-        [nome, cognome, cf, email, telefono, stato_assoc,
+        [nome, cognome, cf, data_nascita, data_iscrizione, associato_riferimento,
+         email, telefono, stato_assoc, indirizzo,
          fiv_numero, fiv_scadenza_tesseramento, fiv_scadenza_certificato, fiv_status,
          chiave_codice, chiave_stato, chiave_credito, chiave_data_assegnazione, chiave_data_riconsegna,
          fatture_table, pagamenti_table]
@@ -887,7 +909,9 @@ def create_servizi_section():
         with gr.TabItem("💰 Prezzario Servizi"):
             prezzario_servizi_ui()
         with gr.TabItem("🏫 Elenco Prestazioni"):
-            elenco_prestazioni_ui()
+            elenco_prestazioni_erogate_ui()
+        with gr.TabItem("💲 Prezzario Prestazioni"):
+            prezzario_prestazioni_ui()
 
 def elenco_servizi_ui():
     """Gestione servizi fisici"""
@@ -1232,7 +1256,7 @@ def scheda_servizio_ui():
                     libera_btn_visible = gr.Button(visible=True)
                 
                 # Prepara tabella assegnazioni storiche
-                if assegnazioni:
+                if assegnazioni is not None and len(assegnazioni) > 0:
                     assegnazioni_df = pd.DataFrame(assegnazioni)
                     if len(assegnazioni_df) > 0:
                         assegnazioni_df['Associato'] = assegnazioni_df.apply(
@@ -1349,7 +1373,7 @@ def scheda_servizio_ui():
                 assegnazioni = safe_get(updated_data, 'assegnazioni', [])
                 
                 # Prepara tabella assegnazioni aggiornata
-                if assegnazioni:
+                if assegnazioni is not None and len(assegnazioni) > 0:
                     assegnazioni_df = pd.DataFrame(assegnazioni)
                     if len(assegnazioni_df) > 0:
                         assegnazioni_df['Associato'] = assegnazioni_df.apply(
@@ -1454,26 +1478,143 @@ def prezzario_servizi_ui():
     
     refresh_btn.click(load_prezzi, [search], prezzi_table)
 
-def elenco_prestazioni_ui():
-    """Gestione prestazioni"""
-    gr.Markdown("### 🏫 Prestazioni")
+def prezzario_prestazioni_ui():
+    """Gestione prezzario prestazioni"""
+    gr.Markdown("### 💲 Prezzario Prestazioni")
     
     with gr.Row():
-        search = gr.Textbox(label="🔍 Cerca")
-        refresh_btn = gr.Button("🔄 Aggiorna")
+        search = gr.Textbox(label="🔍 Cerca Nome", placeholder="Corso Vela, Quota Tesseramento...")
+        refresh_btn = gr.Button("🔄 Aggiorna", variant="secondary")
+        nuovo_btn = gr.Button("➕ Nuova Prestazione", variant="primary")
     
     prestazioni_table = gr.DataFrame(interactive=False)
     
+    # Modal per nuova prestazione
+    with gr.Group(visible=False) as nuovo_prestazione_modal:
+        gr.Markdown("### 🏫 Nuova Prestazione")
+        with gr.Row():
+            prestazione_modal_nome = gr.Textbox(label="Nome *", placeholder="Es: Corso Vela Base")
+            prestazione_modal_costo = gr.Number(label="Costo (€)", value=0.0, precision=2)
+        with gr.Row():
+            prestazione_modal_descrizione = gr.Textbox(label="Descrizione *", placeholder="Descrizione dettagliata", lines=3)
+        with gr.Row():
+            prestazione_save_btn = gr.Button("💾 Salva", variant="primary")
+            prestazione_cancel_btn = gr.Button("❌ Annulla", variant="secondary")
+    
     def load_prestazioni(search_val):
         try:
-            # Note: This should use prestazioni API when available
-            df = pd.DataFrame()  # Placeholder
-            return df
+            df = api_client.get_prestazioni(search=search_val)
+            return df if len(df) > 0 else pd.DataFrame()
         except Exception as e:
             gr.Warning(f"Errore: {e}")
             return pd.DataFrame()
     
+    def show_nuovo_prestazione_modal():
+        """Mostra modal per nuova prestazione"""
+        return gr.Group(visible=True), "", 0.0, ""
+    
+    def hide_nuovo_prestazione_modal():
+        """Nasconde modal nuova prestazione"""
+        return gr.Group(visible=False), "", 0.0, ""
+    
+    def save_nuovo_prestazione(nome, costo, descrizione):
+        """Salva nuova prestazione"""
+        # Validazione campi obbligatori
+        if not nome or not descrizione:
+            gr.Warning("Nome e Descrizione sono obbligatori")
+            return gr.Group(visible=True), nome, costo, descrizione, pd.DataFrame()
+        
+        try:
+            # Prepara i dati per l'API
+            prestazione_data = {
+                "nome_prestazione": nome.strip(),
+                "descrizione": descrizione.strip(),
+                "costo": float(costo) if costo >= 0 else 0.0
+            }
+            
+            result = api_client.create_prestazione(prestazione_data)
+            
+            if result:
+                gr.Info(f"Prestazione '{nome}' creata con successo!")
+                # Ricarica la tabella prestazioni
+                updated_df = api_client.get_prestazioni()
+                return (gr.Group(visible=False), "", 0.0, "", 
+                       updated_df if len(updated_df) > 0 else pd.DataFrame())
+            else:
+                gr.Warning("Errore durante la creazione della prestazione")
+                return gr.Group(visible=True), nome, costo, descrizione, pd.DataFrame()
+                
+        except Exception as e:
+            gr.Warning(f"Errore: {str(e)}")
+            return gr.Group(visible=True), nome, costo, descrizione, pd.DataFrame()
+    
+    # Event handlers
     refresh_btn.click(load_prestazioni, [search], prestazioni_table)
+    
+    nuovo_btn.click(
+        show_nuovo_prestazione_modal,
+        outputs=[nuovo_prestazione_modal, prestazione_modal_nome, prestazione_modal_costo, prestazione_modal_descrizione]
+    )
+    
+    prestazione_cancel_btn.click(
+        hide_nuovo_prestazione_modal,
+        outputs=[nuovo_prestazione_modal, prestazione_modal_nome, prestazione_modal_costo, prestazione_modal_descrizione]
+    )
+    
+    prestazione_save_btn.click(
+        save_nuovo_prestazione,
+        inputs=[prestazione_modal_nome, prestazione_modal_costo, prestazione_modal_descrizione],
+        outputs=[nuovo_prestazione_modal, prestazione_modal_nome, prestazione_modal_costo, prestazione_modal_descrizione, prestazioni_table]
+    )
+    
+    # Carica prestazioni all'avvio
+    prestazioni_table.value = load_prestazioni("")
+
+def elenco_prestazioni_erogate_ui():
+    """Gestione erogazioni prestazioni"""
+    gr.Markdown("### 🏫 Elenco Prestazioni Erogate")
+    
+    with gr.Row():
+        associato_search = gr.Number(label="🔍 ID Associato", precision=0)
+        text_search = gr.Textbox(label="🔎 Ricerca testuale", placeholder="Nome/Cognome associato o Nome/Descrizione prestazione")
+        data_da = gr.Textbox(label="📅 Data Da", placeholder="YYYY-MM-DD")
+        data_a = gr.Textbox(label="📅 Data A", placeholder="YYYY-MM-DD")
+        refresh_btn = gr.Button("🔄 Aggiorna", variant="secondary")
+    
+    erogazioni_table = gr.DataFrame(interactive=False)
+    
+    def load_erogazioni(associato_id, search_val, data_da_val, data_a_val):
+        """Carica erogazioni prestazioni con filtri"""
+        try:
+            # Prepara i parametri per l'API
+            associato_id_val = None
+            if associato_id is not None and str(associato_id).strip() and float(associato_id) > 0:
+                associato_id_val = int(float(associato_id))
+            
+            data_da_val = data_da_val.strip() if data_da_val and str(data_da_val).strip() else None
+            data_a_val = data_a_val.strip() if data_a_val and str(data_a_val).strip() else None
+            search_val = search_val.strip() if search_val and str(search_val).strip() else None
+            
+            df = api_client.get_erogazioni_prestazioni(
+                associato_id=associato_id_val,
+                search=search_val,
+                data_da=data_da_val,
+                data_a=data_a_val
+            )
+            return df if len(df) > 0 else pd.DataFrame()
+        except Exception as e:
+            gr.Warning(f"Errore: {e}")
+            return pd.DataFrame()
+    
+    # Event handlers
+    refresh_btn.click(
+        load_erogazioni,
+        inputs=[associato_search, text_search, data_da, data_a], 
+        outputs=erogazioni_table
+    )
+    
+    # Carica erogazioni all'avvio (tutte)
+    erogazioni_table.value = load_erogazioni(None, None, None, None)
 
 # ===== SEZIONE CONTABILITÀ =====
 
