@@ -1857,7 +1857,8 @@ async def list_fatture(
         params.append(tipo)
     
     if stato:
-        query += " AND f.stato_pagamento = ?"
+        # La colonna corretta nel DB è 'stato'
+        query += " AND f.stato = ?"
         params.append(stato)
     
     if search:
@@ -1874,10 +1875,7 @@ async def list_fatture(
 @app.post("/fatture", status_code=201, summary="Crea fattura")
 async def create_fattura(fattura: FatturaCreate):
     """Crea una nuova fattura"""
-    # Validate that either associato or fornitore is specified
-    if not fattura.fk_associato and not fattura.fk_fornitore:
-        raise HTTPException(status_code=400, detail="Specificare associato o fornitore")
-    
+    # Validazione relazioni: consentire entrambi vuoti; vietare entrambi valorizzati
     if fattura.fk_associato and fattura.fk_fornitore:
         raise HTTPException(status_code=400, detail="Specificare solo associato o fornitore, non entrambi")
     
@@ -1888,9 +1886,11 @@ async def create_fattura(fattura: FatturaCreate):
     if existing:
         raise HTTPException(status_code=400, detail="Numero fattura già esistente")
     
+    # Lo schema Fatture usa la colonna 'stato' con valori ('Emessa','Pagata','Scaduta','Annullata')
+    stato_iniziale = 'Emessa'
     insert_query = """
         INSERT INTO Fatture (numero_fattura, data_emissione, data_scadenza, fk_associato, 
-                            fk_fornitore, importo_totale, stato_pagamento, tipo_fattura, note)
+                            fk_fornitore, importo_totale, stato, tipo_fattura, note)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
     execute_query(insert_query, (
@@ -1900,7 +1900,7 @@ async def create_fattura(fattura: FatturaCreate):
         fattura.fk_associato,
         fattura.fk_fornitore,
         fattura.importo_totale,
-        fattura.stato_pagamento,
+        stato_iniziale,
         fattura.tipo_fattura,
         fattura.note
     ))
@@ -1976,7 +1976,7 @@ async def list_pagamenti(
     params = []
     
     if metodo:
-        query += " AND p.metodo_pagamento LIKE ?"
+        query += " AND p.metodo LIKE ?"
         params.append(f"%{metodo}%")
     
     if dal:
@@ -2003,9 +2003,13 @@ async def create_pagamento(pagamento: PagamentoCreate):
     if not fattura:
         raise HTTPException(status_code=404, detail="Fattura non trovata")
     
-    # Insert pagamento
+    # Determina tipo movimento (compatibilità schema con colonna NOT NULL 'tipo')
+    # Se fattura è 'Attiva' => Entrata, se 'Passiva' => Uscita
+    tipo_mov = 'Entrata' if (fattura.get('tipo_fattura') == 'Attiva') else 'Uscita'
+
+    # Insert pagamento con colonna 'tipo'
     insert_query = """
-        INSERT INTO Pagamenti (fk_fattura, data_pagamento, importo, metodo_pagamento, note)
+        INSERT INTO Pagamenti (fk_fattura, data_pagamento, importo, metodo, tipo)
         VALUES (?, ?, ?, ?, ?)
     """
     execute_query(insert_query, (
@@ -2013,7 +2017,7 @@ async def create_pagamento(pagamento: PagamentoCreate):
         pagamento.data_pagamento,
         pagamento.importo,
         pagamento.metodo_pagamento,
-        pagamento.note
+        tipo_mov,
     ))
     
     # Update fattura status based on total payments
@@ -2025,13 +2029,12 @@ async def create_pagamento(pagamento: PagamentoCreate):
     
     if totale_pagato_val >= importo_fattura:
         nuovo_stato = "Pagata"
-    elif totale_pagato_val > 0:
-        nuovo_stato = "Parzialmente pagata"
     else:
-        nuovo_stato = "Non pagata"
+        # Non sono gestiti qui 'Scaduta'/'Annullata'; default rimane 'Emessa'
+        nuovo_stato = "Emessa"
     
     # Update fattura status
-    update_fattura_query = "UPDATE Fatture SET stato_pagamento = ? WHERE id_fattura = ?"
+    update_fattura_query = "UPDATE Fatture SET stato = ? WHERE id_fattura = ?"
     execute_query(update_fattura_query, (nuovo_stato, pagamento.fk_fattura))
     
     # Return created record

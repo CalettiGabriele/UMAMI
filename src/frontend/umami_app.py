@@ -1643,8 +1643,8 @@ def elenco_prestazioni_erogate_ui():
     def cancel_nuova_erogazione():
         return (
             gr.update(visible=False),
-            gr.update(value=None),
-            gr.update(value=None),
+            gr.update(value=""),
+            gr.update(value=""),
             gr.update(value="")
         )
 
@@ -1728,9 +1728,31 @@ def elenco_fatture_ui():
         tipo = gr.Dropdown(label="Tipo", choices=[""] + TIPO_FATTURA_CHOICES)
         stato = gr.Dropdown(label="Stato", choices=[""] + STATO_FATTURA_CHOICES)
     
-    fatture_table = gr.DataFrame(interactive=False)
-    refresh_btn = gr.Button("🔄 Aggiorna")
+    with gr.Row():
+        refresh_btn = gr.Button("🔄 Aggiorna", variant="secondary")
+        nuova_fattura_btn = gr.Button("➕ Nuova Fattura", variant="primary")
     
+    fatture_table = gr.DataFrame(interactive=False)
+
+    # Modal nuova fattura
+    with gr.Group(visible=False) as nuova_fattura_modal:
+        gr.Markdown("### ✨ Nuova Fattura")
+        with gr.Row():
+            fatt_numero = gr.Textbox(label="Numero Fattura", placeholder="Se vuoto verrà generato automaticamente")
+            fatt_tipo = gr.Dropdown(label="Tipo", choices=TIPO_FATTURA_CHOICES)
+        with gr.Row():
+            fatt_associato_id = gr.Textbox(label="ID Associato", placeholder="Lascia vuoto se non applicabile")
+            fatt_fornitore_id = gr.Textbox(label="ID Fornitore", placeholder="Lascia vuoto se non applicabile")
+        with gr.Row():
+            fatt_data_emissione = gr.Textbox(label="Data Emissione (YYYY-MM-DD)")
+            fatt_data_scadenza = gr.Textbox(label="Data Scadenza (YYYY-MM-DD)")
+        with gr.Row():
+            fatt_imponibile = gr.Number(label="Importo Imponibile", value=0.0)
+            fatt_iva = gr.Number(label="Importo IVA", value=0.0)
+        with gr.Row():
+            fatt_cancel_btn = gr.Button("❌ Annulla")
+            fatt_save_btn = gr.Button("💾 Salva", variant="primary")
+
     def load_fatture(search_val, tipo_val, stato_val):
         try:
             df = api_client.get_fatture(tipo=tipo_val, stato=stato_val, search=search_val)
@@ -1738,30 +1760,285 @@ def elenco_fatture_ui():
         except Exception as e:
             gr.Warning(f"Errore: {e}")
             return pd.DataFrame()
-    
+
+    def open_nuova_fattura():
+        """Mostra modal con date precompilate"""
+        today = datetime.now().date()
+        scadenza = today.replace(day=today.day)  # placeholder to satisfy linter
+        try:
+            from datetime import timedelta as _td
+            scadenza = today + _td(days=30)
+        except Exception:
+            scadenza = today
+        return (
+            gr.update(visible=True),
+            gr.update(value=""),
+            gr.update(value=TIPO_FATTURA_CHOICES[0] if TIPO_FATTURA_CHOICES else None),
+            gr.update(value=None),
+            gr.update(value=None),
+            gr.update(value=str(today)),
+            gr.update(value=str(scadenza)),
+            gr.update(value=0.0),
+            gr.update(value=0.0),
+        )
+
+    def cancel_nuova_fattura():
+        return (
+            gr.update(visible=False),
+            gr.update(value=""),
+            gr.update(value=None),
+            gr.update(value=None),
+            gr.update(value=None),
+            gr.update(value=""),
+            gr.update(value=""),
+            gr.update(value=0.0),
+            gr.update(value=0.0),
+        )
+
+    def save_nuova_fattura(numero, tipo_val, aid, fid, data_em, data_scad, imponibile, iva, f_search, f_tipo, f_stato):
+        try:
+            # Validazioni
+            if not tipo_val:
+                raise ValueError("Selezionare il tipo di fattura")
+            # Tratta 0, 0.0, stringhe vuote e None come 'vuoto'
+            def _clean_id(v):
+                if v is None:
+                    return None
+                try:
+                    sv = str(v).strip()
+                    if sv == "" or sv == "0" or sv == "0.0":
+                        return None
+                    ival = int(float(sv))
+                    if ival == 0:
+                        return None
+                    return ival
+                except Exception:
+                    raise ValueError("L'ID deve essere numerico")
+
+            aid_clean = _clean_id(aid)
+            fid_clean = _clean_id(fid)
+            if (aid_clean is None and fid_clean is None) or (aid_clean is not None and fid_clean is not None):
+                raise ValueError("Specificare SOLO uno tra ID Associato oppure ID Fornitore")
+            # Date
+            def _valid_date(s):
+                try:
+                    datetime.strptime(s, "%Y-%m-%d")
+                    return True
+                except Exception:
+                    return False
+            if not data_em or not _valid_date(str(data_em)):
+                raise ValueError("Data Emissione non valida (YYYY-MM-DD)")
+            if not data_scad or not _valid_date(str(data_scad)):
+                raise ValueError("Data Scadenza non valida (YYYY-MM-DD)")
+            # Importi
+            imp = float(imponibile) if imponibile is not None else 0.0
+            iva_val = float(iva) if iva is not None else 0.0
+            if imp < 0 or iva_val < 0:
+                raise ValueError("Importi non possono essere negativi")
+            totale = imp + iva_val
+            if totale <= 0:
+                raise ValueError("Importo totale deve essere maggiore di 0")
+
+            # Numero fattura
+            num = str(numero).strip() if numero else ""
+            if not num:
+                num = f"MANU-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+            payload = {
+                "numero_fattura": num,
+                "data_emissione": str(data_em),
+                "data_scadenza": str(data_scad),
+                "tipo_fattura": tipo_val,
+                "importo_totale": totale,
+                "stato_pagamento": "Non pagata",
+            }
+            if aid_clean is not None:
+                payload["fk_associato"] = aid_clean
+            if fid_clean is not None:
+                payload["fk_fornitore"] = fid_clean
+
+            res = api_client.create_fattura(payload)
+            if not res:
+                raise RuntimeError("Creazione fattura fallita")
+            gr.Info(f"Fattura creata: {num}")
+
+            # Aggiorna tabella con i filtri attuali e chiudi modal
+            df = load_fatture(f_search, f_tipo, f_stato)
+            return (
+                gr.update(visible=False),
+                "", None, "", "", "", "", 0.0, 0.0,
+                df if df is not None and len(df) > 0 else pd.DataFrame(),
+            )
+        except Exception as e:
+            gr.Warning(f"Errore nel salvataggio: {e}")
+            return gr.update(visible=True), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+
+    # Bindings
     refresh_btn.click(load_fatture, [search, tipo, stato], fatture_table)
+    nuova_fattura_btn.click(
+        open_nuova_fattura,
+        [],
+        [
+            nuova_fattura_modal,
+            fatt_numero, fatt_tipo, fatt_associato_id, fatt_fornitore_id,
+            fatt_data_emissione, fatt_data_scadenza, fatt_imponibile, fatt_iva,
+        ],
+    )
+    fatt_cancel_btn.click(
+        cancel_nuova_fattura,
+        [],
+        [
+            nuova_fattura_modal,
+            fatt_numero, fatt_tipo, fatt_associato_id, fatt_fornitore_id,
+            fatt_data_emissione, fatt_data_scadenza, fatt_imponibile, fatt_iva,
+        ],
+    )
+    fatt_save_btn.click(
+        save_nuova_fattura,
+        [
+            fatt_numero, fatt_tipo, fatt_associato_id, fatt_fornitore_id,
+            fatt_data_emissione, fatt_data_scadenza, fatt_imponibile, fatt_iva,
+            search, tipo, stato,
+        ],
+        [
+            nuova_fattura_modal,
+            fatt_numero, fatt_tipo, fatt_associato_id, fatt_fornitore_id,
+            fatt_data_emissione, fatt_data_scadenza, fatt_imponibile, fatt_iva,
+            fatture_table,
+        ],
+    )
 
 def elenco_pagamenti_ui():
     """Gestione pagamenti"""
     gr.Markdown("### 💳 Pagamenti")
+
+    # Scelte per Metodo Pagamento
+    methods_choices = METODI_PAGAMENTO_CHOICES if 'METODI_PAGAMENTO_CHOICES' in globals() else ["Bonifico", "POS", "Contanti", "Assegno"]
     
     with gr.Row():
-        metodo = gr.Dropdown(label="Metodo", choices=[""] + METODI_PAGAMENTO)
+        metodo = gr.Dropdown(label="Metodo", choices=[""] + methods_choices) if methods_choices else gr.Textbox(label="Metodo")
         dal = gr.Textbox(label="Dal (YYYY-MM-DD)")
         al = gr.Textbox(label="Al (YYYY-MM-DD)")
+        associato_id = gr.Textbox(label="ID Associato")
+
+    with gr.Row():
+        refresh_btn = gr.Button("🔄 Aggiorna", variant="secondary")
+        nuovo_pagamento_btn = gr.Button("➕ Nuovo Pagamento", variant="primary")
     
     pagamenti_table = gr.DataFrame(interactive=False)
-    refresh_btn = gr.Button("🔄 Aggiorna")
-    
-    def load_pagamenti(metodo_val, dal_val, al_val):
+
+    # Modal nuovo pagamento
+    with gr.Group(visible=False) as nuovo_pagamento_modal:
+        gr.Markdown("### ✨ Nuovo Pagamento")
+        with gr.Row():
+            pay_fattura_id = gr.Textbox(label="ID Fattura", placeholder="Obbligatorio")
+            pay_data = gr.Textbox(label="Data Pagamento (YYYY-MM-DD)")
+        with gr.Row():
+            pay_importo = gr.Number(label="Importo (€)", value=0.0)
+            pay_metodo = gr.Dropdown(label="Metodo Pagamento", choices=methods_choices, value=(methods_choices[0] if methods_choices else None))
+        note_pag = gr.Textbox(label="Note", lines=2)
+        with gr.Row():
+            pay_cancel_btn = gr.Button("❌ Annulla")
+            pay_save_btn = gr.Button("💾 Salva", variant="primary")
+
+    def load_pagamenti(metodo_val, dal_val, al_val, assoc_val):
         try:
-            df = api_client.get_pagamenti(metodo=metodo_val, dal=dal_val, al=al_val)
+            df = api_client.get_pagamenti(metodo=metodo_val or "", dal=dal_val or None, al=al_val or None, associato_id=assoc_val or None)
             return df if len(df) > 0 else pd.DataFrame()
         except Exception as e:
             gr.Warning(f"Errore: {e}")
             return pd.DataFrame()
-    
-    refresh_btn.click(load_pagamenti, [metodo, dal, al], pagamenti_table)
+
+    def open_nuovo_pagamento():
+        today = datetime.now().date()
+        return (
+            gr.update(visible=True),
+            gr.update(value=""),
+            gr.update(value=str(today)),
+            gr.update(value=0.0),
+            gr.update(value=(methods_choices[0] if methods_choices else None)),
+            gr.update(value=""),
+        )
+
+    def cancel_nuovo_pagamento():
+        return (
+            gr.update(visible=False),
+            gr.update(value=""),
+            gr.update(value=""),
+            gr.update(value=0.0),
+            gr.update(value=(methods_choices[0] if methods_choices else None)),
+            gr.update(value=""),
+        )
+
+    def save_nuovo_pagamento(fattura_id, data_pag, importo, metodo_p, note, f_metodo, f_dal, f_al, f_assoc):
+        try:
+            # Validazioni
+            if not fattura_id or not str(fattura_id).strip():
+                raise ValueError("ID Fattura obbligatorio")
+            try:
+                fattura_id_clean = int(str(fattura_id).strip())
+            except Exception:
+                raise ValueError("ID Fattura deve essere numerico")
+            if not data_pag or not isinstance(data_pag, str) or len(data_pag) != 10:
+                raise ValueError("Data Pagamento non valida (YYYY-MM-DD)")
+            try:
+                datetime.strptime(data_pag, "%Y-%m-%d")
+            except Exception:
+                raise ValueError("Data Pagamento non valida (YYYY-MM-DD)")
+            if importo is None or float(importo) <= 0:
+                raise ValueError("Importo deve essere > 0")
+            metodo_clean = (metodo_p or "").strip()
+            if not metodo_clean:
+                raise ValueError("Metodo pagamento obbligatorio")
+
+            payload = {
+                "fk_fattura": fattura_id_clean,
+                "data_pagamento": data_pag,
+                "importo": float(importo),
+                "metodo_pagamento": metodo_clean,
+            }
+            if note and str(note).strip():
+                payload["note"] = str(note).strip()
+
+            res = api_client.create_pagamento(payload)
+            if not res:
+                raise RuntimeError("Creazione pagamento fallita")
+            gr.Info("Pagamento creato con successo")
+
+            # refresh tabella
+            df = load_pagamenti(f_metodo, f_dal, f_al, f_assoc)
+            return (
+                gr.update(visible=False),
+                "", "", 0.0, (methods_choices[0] if methods_choices else None), "",
+                df if df is not None and len(df) > 0 else pd.DataFrame(),
+            )
+        except Exception as e:
+            gr.Warning(f"Errore nel salvataggio: {e}")
+            return gr.update(visible=True), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+
+    # Bindings
+    refresh_btn.click(load_pagamenti, [metodo, dal, al, associato_id], pagamenti_table)
+    nuovo_pagamento_btn.click(
+        open_nuovo_pagamento,
+        [],
+        [
+            nuovo_pagamento_modal,
+            pay_fattura_id, pay_data, pay_importo, pay_metodo, note_pag,
+        ],
+    )
+    pay_cancel_btn.click(
+        cancel_nuovo_pagamento,
+        [],
+        [
+            nuovo_pagamento_modal,
+            pay_fattura_id, pay_data, pay_importo, pay_metodo, note_pag,
+        ],
+    )
+    pay_save_btn.click(
+        save_nuovo_pagamento,
+        [pay_fattura_id, pay_data, pay_importo, pay_metodo, note_pag, metodo, dal, al, associato_id],
+        [nuovo_pagamento_modal, pay_fattura_id, pay_data, pay_importo, pay_metodo, note_pag, pagamenti_table],
+    )
 
 # ===== SEZIONE REPORT =====
 
