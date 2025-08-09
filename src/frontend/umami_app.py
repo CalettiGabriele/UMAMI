@@ -2057,22 +2057,214 @@ def bilancio_economico_ui():
     with gr.Row():
         anno = gr.Number(label="Anno", value=datetime.now().year, precision=0)
         genera_btn = gr.Button("📈 Genera Bilancio", variant="primary")
+        scarica_pdf_btn = gr.Button("📄 Scarica PDF", variant="secondary")
     
     bilancio_summary = gr.HTML()
+    bilancio_state = gr.State({})
+    pdf_file = gr.File(label="Bilancio PDF", interactive=False, visible=False)
+    
+    def _fmt_euro(v):
+        try:
+            return format_currency(float(v))
+        except Exception:
+            return format_currency(0)
+    
+    def _month_name(m):
+        mesi = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"]
+        return mesi[m-1] if 1 <= m <= 12 else str(m)
     
     def genera_bilancio(anno_val):
-        # Mock bilancio data
-        html = f"""
-        <div style="padding: 20px; background: #f0f0f0; border-radius: 10px;">
-            <h3>Bilancio {anno_val}</h3>
-            <p><strong>Totale Entrate:</strong> {format_currency(28000)}</p>
-            <p><strong>Totale Uscite:</strong> {format_currency(17000)}</p>
-            <p><strong>Saldo Netto:</strong> <span style="color: green;">{format_currency(11000)}</span></p>
+        try:
+            year = int(anno_val)
+        except Exception:
+            gr.Warning("Anno non valido")
+            return gr.update(), {}
+        dal = date(year, 1, 1)
+        al = date(year, 12, 31)
+        df = api_client.get_pagamenti(dal=dal, al=al)
+        if df is None or df.empty:
+            html = f"""
+            <div style='padding:16px;background:#fff3cd;border:1px solid #ffeeba;border-radius:8px;'>
+                <h3>Bilancio {year}</h3>
+                <p>Nessun movimento trovato per l'anno selezionato.</p>
+            </div>
+            """
+            return html, {"anno": year, "tables": {}, "totals": {}}
+        # Normalizza colonne attese
+        cols = {c.lower(): c for c in df.columns}
+        def col(name): return cols.get(name, name)
+        # Split Entrate/Uscite
+        entrate = df[df[col('tipo')] == 'Entrata'].copy() if col('tipo') in df.columns else pd.DataFrame()
+        uscite = df[df[col('tipo')] == 'Uscita'].copy() if col('tipo') in df.columns else pd.DataFrame()
+        # Totali
+        tot_entrate = float(entrate[col('importo')].sum()) if not entrate.empty else 0.0
+        tot_uscite = float(uscite[col('importo')].sum()) if not uscite.empty else 0.0
+        saldo = tot_entrate - tot_uscite
+        # Per metodo
+        def agg_by(colname, frame):
+            if frame.empty or col(colname) not in frame.columns:
+                return pd.DataFrame(columns=[colname, 'importo']).astype({colname: 'object', 'importo': 'float'})
+            return frame.groupby(col(colname), dropna=False)[col('importo')].sum().reset_index().rename(columns={col(colname): colname, col('importo'): 'importo'}).sort_values('importo', ascending=False)
+        entrate_by_metodo = agg_by('metodo', entrate)
+        uscite_by_metodo = agg_by('metodo', uscite)
+        # Mensile
+        if col('data_pagamento') in df.columns:
+            df['_mese'] = pd.to_datetime(df[col('data_pagamento')]).dt.month
+            mensile = df.groupby(['_mese', col('tipo')])[col('importo')].sum().reset_index()
+        else:
+            mensile = pd.DataFrame(columns=['_mese', 'tipo', 'importo'])
+        # Top controparti
+        cont_col = col('cliente_fornitore') if col('cliente_fornitore') in df.columns else None
+        def top_by_counterparty(frame, n=10):
+            if frame.empty or not cont_col:
+                return pd.DataFrame(columns=['cliente_fornitore', 'importo'])
+            return frame.groupby(cont_col)[col('importo')].sum().reset_index().rename(columns={cont_col: 'cliente_fornitore', col('importo'): 'importo'}).sort_values('importo', ascending=False).head(n)
+        top_entrate = top_by_counterparty(entrate)
+        top_uscite = top_by_counterparty(uscite)
+        # HTML rendering
+        def df_to_html_table(df_in, title):
+            if df_in is None or df_in.empty:
+                return f"<h4 style='margin-top:16px'>{title}</h4><p>Nessun dato</p>"
+            rows = "".join(
+                f"<tr><td>{str(r[0])}</td><td style='text-align:right'>{_fmt_euro(r[1])}</td></tr>" for r in df_in.values
+            )
+            return f"""
+            <h4 style='margin-top:16px'>{title}</h4>
+            <table style='width:100%;border-collapse:collapse'>
+                <thead>
+                    <tr style='background:#f8f9fa'>
+                        <th style='text-align:left;padding:6px;border-bottom:1px solid #dee2e6'>Voce</th>
+                        <th style='text-align:right;padding:6px;border-bottom:1px solid #dee2e6'>Importo</th>
+                    </tr>
+                </thead>
+                <tbody>{rows}</tbody>
+            </table>
+            """
+        # Mensile HTML
+        if not mensile.empty:
+            mensile_pivot = mensile.pivot(index='_mese', columns=col('tipo'), values=col('importo')).fillna(0)
+            mensile_pivot = mensile_pivot.rename_axis(None, axis=1).reset_index()
+            mensile_rows = "".join(
+                f"<tr><td>{_month_name(int(r['_mese']))}</td>" +
+                f"<td style='text-align:right'>{_fmt_euro(r.get('Entrata',0))}</td>" +
+                f"<td style='text-align:right'>{_fmt_euro(r.get('Uscita',0))}</td>" +
+                f"<td style='text-align:right'>{_fmt_euro(r.get('Entrata',0)-r.get('Uscita',0))}</td></tr>"
+                for _, r in mensile_pivot.iterrows()
+            )
+            mensile_html = f"""
+            <h4 style='margin-top:16px'>Andamento Mensile</h4>
+            <table style='width:100%;border-collapse:collapse'>
+                <thead>
+                    <tr style='background:#f8f9fa'>
+                        <th style='text-align:left;padding:6px;border-bottom:1px solid #dee2e6'>Mese</th>
+                        <th style='text-align:right;padding:6px;border-bottom:1px solid #dee2e6'>Entrate</th>
+                        <th style='text-align:right;padding:6px;border-bottom:1px solid #dee2e6'>Uscite</th>
+                        <th style='text-align:right;padding:6px;border-bottom:1px solid #dee2e6'>Saldo</th>
+                    </tr>
+                </thead>
+                <tbody>{mensile_rows}</tbody>
+            </table>
+            """
+        else:
+            mensile_html = ""
+        header_html = f"""
+        <div style='padding: 20px; background: #ffffff; border:1px solid #e9ecef; border-radius: 10px;'>
+            <h3 style='margin-top:0'>Bilancio {year}</h3>
+            <div style='display:flex;gap:24px;flex-wrap:wrap'>
+                <div style='flex:1;min-width:220px;background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0'>
+                    <div style='color:#64748b;font-size:12px'>Totale Entrate</div>
+                    <div style='font-size:20px;font-weight:600;color:#16a34a'>{_fmt_euro(tot_entrate)}</div>
+                </div>
+                <div style='flex:1;min-width:220px;background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0'>
+                    <div style='color:#64748b;font-size:12px'>Totale Uscite</div>
+                    <div style='font-size:20px;font-weight:600;color:#dc2626'>{_fmt_euro(tot_uscite)}</div>
+                </div>
+                <div style='flex:1;min-width:220px;background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0'>
+                    <div style='color:#64748b;font-size:12px'>Saldo Netto</div>
+                    <div style='font-size:20px;font-weight:600;color:{('#16a34a' if saldo>=0 else '#dc2626')}'>{_fmt_euro(saldo)}</div>
+                </div>
+            </div>
         </div>
         """
-        return html
+        html = (
+            header_html +
+            df_to_html_table(entrate_by_metodo, "Entrate per Metodo") +
+            df_to_html_table(uscite_by_metodo, "Uscite per Metodo") +
+            mensile_html +
+            df_to_html_table(top_entrate, "Top 10 Controparti (Entrate)") +
+            df_to_html_table(top_uscite, "Top 10 Controparti (Uscite)")
+        )
+        state = {
+            "anno": year,
+            "tot_entrate": tot_entrate,
+            "tot_uscite": tot_uscite,
+            "saldo": saldo,
+            "entrate_by_metodo": entrate_by_metodo.to_dict(orient='records'),
+            "uscite_by_metodo": uscite_by_metodo.to_dict(orient='records'),
+            "top_entrate": top_entrate.to_dict(orient='records'),
+            "top_uscite": top_uscite.to_dict(orient='records'),
+            "mensile": mensile.to_dict(orient='records'),
+        }
+        return html, state
     
-    genera_btn.click(genera_bilancio, [anno], bilancio_summary)
+    def scarica_pdf(state):
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib import colors
+            from reportlab.lib.styles import getSampleStyleSheet
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+            from reportlab.lib.units import cm
+        except Exception:
+            gr.Warning("Per l'esportazione in PDF installa il pacchetto 'reportlab' (es: uv add reportlab)")
+            return gr.update(visible=False)
+        if not state or not isinstance(state, dict):
+            gr.Warning("Genera prima il bilancio")
+            return gr.update(visible=False)
+        anno = state.get('anno')
+        fn = f"bilancio_{anno}.pdf"
+        out_path = f"/tmp/{fn}"
+        doc = SimpleDocTemplate(out_path, pagesize=A4, rightMargin=24, leftMargin=24, topMargin=24, bottomMargin=24)
+        styles = getSampleStyleSheet()
+        elems = []
+        elems.append(Paragraph(f"Bilancio {anno}", styles['Title']))
+        elems.append(Spacer(1, 0.3*cm))
+        # Totali
+        tot_tbl = [["Totale Entrate", _fmt_euro(state.get('tot_entrate',0))],
+                   ["Totale Uscite", _fmt_euro(state.get('tot_uscite',0))],
+                   ["Saldo Netto", _fmt_euro(state.get('saldo',0))]]
+        t = Table(tot_tbl, colWidths=[8*cm, 6*cm])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.whitesmoke),
+            ('GRID', (0,0), (-1,-1), 0.25, colors.gray),
+            ('ALIGN', (1,0), (1,-1), 'RIGHT'),
+        ]))
+        elems.append(t)
+        elems.append(Spacer(1, 0.4*cm))
+        # Helper to add tables
+        def add_table(title, records):
+            elems.append(Paragraph(title, styles['Heading3']))
+            if not records:
+                elems.append(Paragraph("Nessun dato", styles['Normal']))
+                return
+            data = [["Voce", "Importo"]] + [[r.get('metodo') or r.get('cliente_fornitore') or '—', _fmt_euro(r.get('importo',0))] for r in records]
+            tbl = Table(data, colWidths=[8*cm, 6*cm])
+            tbl.setStyle(TableStyle([
+                ('GRID', (0,0), (-1,-1), 0.25, colors.gray),
+                ('BACKGROUND', (0,0), (-1,0), colors.whitesmoke),
+                ('ALIGN', (1,1), (1,-1), 'RIGHT'),
+            ]))
+            elems.append(tbl)
+            elems.append(Spacer(1, 0.3*cm))
+        add_table("Entrate per Metodo", state.get('entrate_by_metodo'))
+        add_table("Uscite per Metodo", state.get('uscite_by_metodo'))
+        add_table("Top 10 Controparti (Entrate)", state.get('top_entrate'))
+        add_table("Top 10 Controparti (Uscite)", state.get('top_uscite'))
+        # Build
+        doc.build(elems)
+        return gr.update(value=out_path, visible=True)
+    
+    genera_btn.click(genera_bilancio, [anno], [bilancio_summary, bilancio_state])
+    scarica_pdf_btn.click(scarica_pdf, [bilancio_state], [pdf_file])
 
 def soci_morosi_ui():
     """Report soci morosi"""
