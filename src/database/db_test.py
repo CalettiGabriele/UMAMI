@@ -46,10 +46,9 @@ class DatabasePopulator:
         """Pulisce tutti i dati dalle tabelle per un nuovo inserimento."""
         print("\nPulizia dati esistenti...")
         tables = [
-            'Pagamenti', 'DettagliFatture', 'Fatture', 'ErogazioniPrestazioni',
-            'AssegnazioniServiziFisici', 'PrezziServizi', 'Prestazioni',
-            'ServiziFisici', 'Fornitori', 'TessereFIV', 
-            'ChiaviElettroniche', 'Associati'
+            'Pagamenti', 'Fatture', 'ErogazioniPrestazioni',
+            'AssegnazioniServizi', 'Servizi', 'PrezziServizi', 'Prestazioni',
+            'Fornitori', 'TessereFIV', 'ChiaviElettroniche', 'Associati'
         ]
         try:
             for table in tables:
@@ -127,18 +126,20 @@ class DatabasePopulator:
             print(f"â— Errore in Fornitori: {e}")
 
     def populate_servizi(self):
-        """Popola ServiziFisici, PrezziServizi, Prestazioni."""
+        """Popola Servizi, PrezziServizi, Prestazioni."""
         print("\nPopolamento tabelle Servizi...")
-        servizi_fisici = [
-            (1, 'Posto Barca A-01', 'Posto barca fino a 8m', 'Posto Barca', 'Occupato'),
-            (2, 'Posto Barca B-12', 'Posto barca fino a 12m', 'Posto Barca', 'Disponibile'),
-            (3, 'Armadietto N-5', 'Armadietto spogliatoio maschile', 'Armadietto', 'Occupato'),
-            (4, 'Armadietto F-8', 'Armadietto spogliatoio femminile', 'Armadietto', 'In Manutenzione'),
-        ]
+        # PrezziServizi: id_prezzo, categoria_servizio, costo
         prezzi_servizi = [
-            (1, 2500.00),
-            (2, 4000.00),
-            (3, 150.00),
+            (1, 'Posto Barca (<=8m)', 2500.00),
+            (2, 'Posto Barca (<=12m)', 4000.00),
+            (3, 'Armadietto', 150.00),
+        ]
+        # Servizi: id_servizio, nome, descrizione, categoria, fk_prezzo, stato
+        servizi = [
+            (1, 'Posto Barca A-01', 'Posto barca fino a 8m', 'Posto Barca', 1, 'Occupato'),
+            (2, 'Posto Barca B-12', 'Posto barca fino a 12m', 'Posto Barca', 2, 'Disponibile'),
+            (3, 'Armadietto N-5', 'Armadietto spogliatoio maschile', 'Armadietto', 3, 'Occupato'),
+            (4, 'Armadietto F-8', 'Armadietto spogliatoio femminile', 'Armadietto', 3, 'In Manutenzione'),
         ]
         prestazioni = [
             (1, 'Corso Vela Base', 'Corso di 5 lezioni su deriva', 350.00),
@@ -146,15 +147,24 @@ class DatabasePopulator:
             (3, 'Quota Tesseramento FIV', 'Tesseramento annuale alla Federazione Italiana Vela', 30.00),
         ]
         try:
-            self.cursor.executemany("INSERT INTO ServiziFisici VALUES (?,?,?,?,?)", servizi_fisici)
-            self.cursor.executemany("INSERT INTO PrezziServizi VALUES (?,?)", prezzi_servizi)
-            self.cursor.executemany("INSERT INTO Prestazioni VALUES (?,?,?,?)", prestazioni)
-            print(f"✓ {len(servizi_fisici)} ServiziFisici, {len(prezzi_servizi)} PrezziServizi, {len(prestazioni)} Prestazioni inseriti.")
+            self.cursor.executemany(
+                "INSERT INTO PrezziServizi (id_prezzo, categoria_servizio, costo) VALUES (?,?,?)",
+                prezzi_servizi,
+            )
+            self.cursor.executemany(
+                "INSERT INTO Servizi (id_servizio, nome, descrizione, categoria, fk_prezzo, stato) VALUES (?,?,?,?,?,?)",
+                servizi,
+            )
+            self.cursor.executemany(
+                "INSERT INTO Prestazioni (id_prestazione, nome_prestazione, descrizione, costo) VALUES (?,?,?,?)",
+                prestazioni,
+            )
+            print(f"✓ {len(servizi)} Servizi, {len(prezzi_servizi)} PrezziServizi, {len(prestazioni)} Prestazioni inseriti.")
         except sqlite3.Error as e:
             print(f"✗ Errore nelle tabelle Servizi: {e}")
 
     def populate_assegnazioni_e_erogazioni(self):
-        """Popola AssegnazioniServiziFisici e ErogazioniPrestazioni."""
+        """Popola AssegnazioniServizi e ErogazioniPrestazioni."""
         print("\nPopolamento Assegnazioni e Erogazioni...")
         assegnazioni = [
             (1, 4, 1, 2024, '2024-01-01', '2024-12-31', 'Attivo'), # Verdi, Posto Barca A-01
@@ -166,43 +176,46 @@ class DatabasePopulator:
             (3, 3, 3, datetime(2024, 1, 20, 9, 0).strftime('%Y-%m-%d %H:%M:%S')),  # L. Rossi, Tesseramento FIV
         ]
         try:
-            self.cursor.executemany("INSERT INTO AssegnazioniServiziFisici VALUES (?,?,?,?,?,?,?)", assegnazioni)
-            self.cursor.executemany("INSERT INTO ErogazioniPrestazioni VALUES (?,?,?,?)", erogazioni)
+            self.cursor.executemany(
+                "INSERT INTO AssegnazioniServizi (id_assegnazione, fk_associato, fk_servizio, anno_competenza, data_inizio, data_fine, stato) VALUES (?,?,?,?,?,?,?)",
+                assegnazioni,
+            )
+            self.cursor.executemany(
+                "INSERT INTO ErogazioniPrestazioni (id_erogazione, fk_associato, fk_prestazione, data_erogazione) VALUES (?,?,?,?)",
+                erogazioni,
+            )
             print(f"âœ“ {len(assegnazioni)} Assegnazioni e {len(erogazioni)} Erogazioni inserite.")
         except sqlite3.Error as e:
             print(f"â— Errore in Assegnazioni/Erogazioni: {e}")
 
     def populate_fatture_e_pagamenti(self):
-        """Popola Fatture, DettagliFatture, Pagamenti."""
+        """Popola Fatture (senza dettagli) e Pagamenti."""
         print("\nPopolamento ciclo contabile...")
+        # Fatture: uso modello consolidato a riga singola con descrizione aggregata e link di tracciabilità opzionali
         fatture = [
-            # Fattura ATTIVA a G. Verdi (pagata)
-            (1, 'ATT-2024-001', '2024-01-10', '2024-02-10', 4, None, 'Attiva', 2500.00, 550.00, 3050.00, 'Pagata'),
-            # Fattura ATTIVA a M. Rossi (famiglia, emessa)
-            (2, 'ATT-2024-002', '2024-06-15', '2024-07-15', 1, None, 'Attiva', 580.00, 127.60, 707.60, 'Emessa'),
-            # Fattura PASSIVA da Sail & Fun (scaduta)
-            (3, 'PASS-2024-SF-10', '2024-03-01', '2024-03-31', None, 1, 'Passiva', 1200.00, 264.00, 1464.00, 'Scaduta'),
-        ]
-        dettagli = [
-            # Dettagli per fattura 1 (Verdi)
-            (1, 1, 'Canone annuale Posto Barca A-01', 1, 2500.00, 2500.00, 1, None),
-            # Dettagli per fattura 2 (Rossi)
-            (2, 2, 'Iscrizione Corso Vela Base - Luca Rossi', 1, 350.00, 350.00, None, 1),
-            (3, 2, 'Iscrizione Regata Sociale Estiva - Mario Rossi', 1, 50.00, 50.00, None, 2),
-            (4, 2, 'Canone annuale Armadietto N-5 - Mario Rossi', 1, 150.00, 150.00, 2, None),
-            (5, 2, 'Quota Tesseramento FIV - Luca Rossi', 1, 30.00, 30.00, None, 3),
-            # Dettagli per fattura 3 (Passiva)
-            (6, 3, 'Fornitura materiale di consumo', 1, 1200.00, 1200.00, None, None),
+            # id_fattura, numero, data_emissione, data_scadenza, fk_associato, fk_fornitore, tipo, imponibile, iva, importo_totale, stato,
+            # categoria, gruppo, settore, descrizione, fk_assegnazione_servizio, fk_erogazione_prestazione
+            (1, 'ATT-2024-001', '2024-01-10', '2024-02-10', 4, None, 'Attiva', 2500.00, 550.00, 3050.00, 'Pagata',
+             'Entrate', 'Servizi', 'Posti Barca', 'Canone annuale Posto Barca A-01', 1, None),
+            (2, 'ATT-2024-002', '2024-06-15', '2024-07-15', 1, None, 'Attiva', 580.00, 127.60, 707.60, 'Emessa',
+             'Entrate', 'Corsi e Servizi', 'Misto', 'Corso Vela; Regata Sociale; Armadietto; Quota FIV', None, None),
+            (3, 'PASS-2024-SF-10', '2024-03-01', '2024-03-31', None, 1, 'Passiva', 1200.00, 264.00, 1464.00, 'Scaduta',
+             'Uscite', 'Acquisti', 'Materiali', 'Fornitura materiale di consumo', None, None),
         ]
         pagamenti = [
-            # Pagamento per fattura 1 (Verdi)
+            # id_pagamento, data_pagamento, importo, metodo, fk_fattura, tipo_movimento
             (1, '2024-02-05', 3050.00, 'Bonifico', 1, 'Entrata'),
         ]
         try:
-            self.cursor.executemany("INSERT INTO Fatture VALUES (?,?,?,?,?,?,?,?,?,?,?)", fatture)
-            self.cursor.executemany("INSERT INTO DettagliFatture VALUES (?,?,?,?,?,?,?,?)", dettagli)
-            self.cursor.executemany("INSERT INTO Pagamenti VALUES (?,?,?,?,?,?)", pagamenti)
-            print(f"âœ“ {len(fatture)} Fatture, {len(dettagli)} Dettagli, {len(pagamenti)} Pagamenti inseriti.")
+            self.cursor.executemany(
+                "INSERT INTO Fatture (id_fattura, numero_fattura, data_emissione, data_scadenza, fk_associato, fk_fornitore, tipo_fattura, importo_imponibile, importo_iva, importo_totale, stato, categoria, gruppo, settore, descrizione, fk_assegnazione_servizio, fk_erogazione_prestazione) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                fatture,
+            )
+            self.cursor.executemany(
+                "INSERT INTO Pagamenti (id_pagamento, data_pagamento, importo, metodo, fk_fattura, tipo) VALUES (?,?,?,?,?,?)",
+                pagamenti,
+            )
+            print(f"âœ“ {len(fatture)} Fatture e {len(pagamenti)} Pagamenti inseriti.")
         except sqlite3.Error as e:
             print(f"â— Errore nel ciclo contabile: {e}")
 

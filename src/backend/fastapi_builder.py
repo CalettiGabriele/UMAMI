@@ -377,11 +377,11 @@ async def get_associato_endpoint(
         chiave_query = "SELECT * FROM ChiaviElettroniche WHERE fk_associato = ?"
         chiave_elettronica = execute_query(chiave_query, (associato_id,), fetch_one=True)
         
-        # Get servizi fisici assegnati
+        # Get servizi assegnati
         servizi_query = """
-        SELECT sf.*, asf.data_inizio, asf.data_fine, asf.anno_competenza, asf.stato as stato_assegnazione
-        FROM ServiziFisici sf
-        JOIN AssegnazioniServiziFisici asf ON sf.id_servizio_fisico = asf.fk_servizio_fisico
+        SELECT s.*, asf.data_inizio, asf.data_fine, asf.anno_competenza, asf.stato as stato_assegnazione
+        FROM Servizi s
+        JOIN AssegnazioniServizi asf ON s.id_servizio = asf.fk_servizio
         WHERE asf.fk_associato = ?
         ORDER BY asf.anno_competenza DESC
         """
@@ -825,45 +825,50 @@ async def ricarica_crediti_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in ricarica_crediti: {e}")
+        logger.error(f"Error in ricarica_crediti_endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# ===== ENDPOINTS SERVIZI FISICI =====
-
-@app.get("/servizi-fisici", summary="Lista servizi fisici")
-async def list_servizi_fisici(
+@app.get("/servizi", summary="Lista servizi")
+async def list_servizi(
     stato: Optional[str] = Query(None, pattern="^(Disponibile|Occupato|In Manutenzione)$", description="Filtra per stato"),
     tipo: Optional[str] = Query(None, description="Filtra per tipo/categoria")
 ):
-    """Recupera la lista dei servizi fisici con filtri"""
+    """Recupera la lista dei servizi con filtri"""
     try:
         # Build query with filters
         where_clauses = []
         params = []
         
         if stato:
-            where_clauses.append("sf.stato = ?")
+            where_clauses.append("s.stato = ?")
             params.append(stato)
         
         if tipo:
-            where_clauses.append("sf.categoria = ?")
+            where_clauses.append("s.categoria = ?")
             params.append(tipo)
         
         where_clause = " AND ".join(where_clauses) if where_clauses else "1=1"
         
         # Get results with current assignments
         query = f"""
-        SELECT sf.id_servizio_fisico, sf.nome, sf.categoria, sf.descrizione, sf.stato,
-               ps.costo,
-               asf.fk_associato,
-               a.nome as assegnatario_nome, a.cognome as assegnatario_cognome
-        FROM ServiziFisici sf
-        LEFT JOIN PrezziServizi ps ON sf.categoria = ps.id_categoria_servizio
-        LEFT JOIN AssegnazioniServiziFisici asf ON sf.id_servizio_fisico = asf.fk_servizio_fisico 
-                  AND asf.stato = 'Attivo' AND asf.data_fine >= date('now')
+        SELECT 
+            s.id_servizio,
+            s.nome,
+            s.categoria,
+            s.descrizione,
+            s.stato,
+            ps.costo as prezzo_listino,
+            a.nome as assegnatario_nome,
+            a.cognome as assegnatario_cognome
+        FROM Servizi s
+        LEFT JOIN PrezziServizi ps ON s.fk_prezzo = ps.id_prezzo
+        LEFT JOIN (
+            SELECT asf.* FROM AssegnazioniServizi asf
+            WHERE asf.stato = 'Attivo' AND asf.data_fine >= date('now')
+        ) asf ON asf.fk_servizio = s.id_servizio
         LEFT JOIN Associati a ON asf.fk_associato = a.id_associato
         WHERE {where_clause}
-        ORDER BY sf.categoria, sf.id_servizio_fisico
+        ORDER BY s.categoria, s.id_servizio
         """
         
         results = execute_query(query, tuple(params))
@@ -873,16 +878,16 @@ async def list_servizi_fisici(
             "results": results
         }
     except Exception as e:
-        logger.error(f"Error in list_servizi_fisici: {e}")
+        logger.error(f"Error in list_servizi: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/servizi-fisici", status_code=201, summary="Crea servizio fisico")
-async def create_servizio_fisico_endpoint(servizio: ServizioFisicoCreate):
-    """Crea un nuovo servizio fisico"""
+@app.post("/servizi", status_code=201, summary="Crea servizio")
+async def create_servizio_endpoint(servizio: ServizioFisicoCreate):
+    """Crea un nuovo servizio"""
     try:
-        # Insert new servizio fisico
+        # Insert new servizio
         insert_query = """
-        INSERT INTO ServiziFisici (nome, descrizione, categoria, stato)
+        INSERT INTO Servizi (nome, descrizione, categoria, stato)
         VALUES (?, ?, ?, ?)
         """
         
@@ -897,33 +902,33 @@ async def create_servizio_fisico_endpoint(servizio: ServizioFisicoCreate):
         conn.close()
         
         # Return created servizio
-        return_query = "SELECT * FROM ServiziFisici WHERE id_servizio_fisico = ?"
+        return_query = "SELECT * FROM Servizi WHERE id_servizio = ?"
         result = execute_query(return_query, (new_id,), fetch_one=True)
         return result
         
     except Exception as e:
-        logger.error(f"Error in create_servizio_fisico: {e}")
+        logger.error(f"Error in create_servizio: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/servizi-fisici/{servizio_id}", summary="Dettagli servizio fisico")
-async def get_servizio_fisico_endpoint(
-    servizio_id: int = Path(..., description="ID del servizio fisico")
+@app.get("/servizi/{servizio_id}", summary="Dettagli servizio")
+async def get_servizio_endpoint(
+    servizio_id: int = Path(..., description="ID del servizio")
 ):
-    """Recupera i dettagli di un servizio fisico con assegnazioni storiche"""
+    """Recupera i dettagli di un servizio con assegnazioni storiche"""
     try:
         # Get servizio base info
-        query = "SELECT * FROM ServiziFisici WHERE id_servizio_fisico = ?"
+        query = "SELECT * FROM Servizi WHERE id_servizio = ?"
         servizio = execute_query(query, (servizio_id,), fetch_one=True)
         
         if not servizio:
-            raise HTTPException(status_code=404, detail="Servizio fisico non trovato")
+            raise HTTPException(status_code=404, detail="Servizio non trovato")
         
         # Get assegnazioni storiche
         assegnazioni_query = """
-        SELECT asf.*, a.nome, a.cognome, a.email
-        FROM AssegnazioniServiziFisici asf
+        SELECT asf.*, a.nome, a.cognome
+        FROM AssegnazioniServizi asf
         JOIN Associati a ON asf.fk_associato = a.id_associato
-        WHERE asf.fk_servizio_fisico = ?
+        WHERE asf.fk_servizio = ?
         ORDER BY asf.anno_competenza DESC, asf.data_inizio DESC
         """
         assegnazioni = execute_query(assegnazioni_query, (servizio_id,))
@@ -936,65 +941,63 @@ async def get_servizio_fisico_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in get_servizio_fisico: {e}")
+        logger.error(f"Error in get_servizio: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.put("/servizi-fisici/{servizio_id}", summary="Aggiorna servizio fisico")
-async def update_servizio_fisico_endpoint(
-    servizio_id: int = Path(..., description="ID del servizio fisico"),
+@app.put("/servizi/{servizio_id}", summary="Aggiorna servizio")
+async def update_servizio_endpoint(
+    servizio_id: int = Path(..., description="ID del servizio"),
     servizio: ServizioFisicoUpdate = Body(...)
 ):
-    """Aggiorna i dati di un servizio fisico"""
+    """Aggiorna i dati di un servizio"""
     try:
         # Check if servizio exists
-        check_query = "SELECT id_servizio_fisico FROM ServiziFisici WHERE id_servizio_fisico = ?"
+        check_query = "SELECT id_servizio FROM Servizi WHERE id_servizio = ?"
         existing = execute_query(check_query, (servizio_id,), fetch_one=True)
         if not existing:
-            raise HTTPException(status_code=404, detail="Servizio fisico non trovato")
+            raise HTTPException(status_code=404, detail="Servizio non trovato")
         
-        # Build update query with only non-None fields
-        update_data = {k: v for k, v in servizio.dict().items() if v is not None}
-        
+        update_data = servizio.model_dump(exclude_unset=True)
         if not update_data:
             raise HTTPException(status_code=400, detail="Nessun campo da aggiornare")
         
-        # Map model fields to database columns
+        # Map model fields to DB columns
         field_mapping = {
-            'nome': 'nome',
-            'descrizione': 'descrizione', 
             'tipo': 'categoria',
+            'nome': 'nome',
+            'descrizione': 'descrizione',
             'stato': 'stato'
         }
+        db_update = {field_mapping[k]: v for k, v in update_data.items() if k in field_mapping}
+        set_clauses = [f"{k} = ?" for k in db_update.keys()]
+        update_query = f"UPDATE Servizi SET {', '.join(set_clauses)} WHERE id_servizio = ?"
         
-        set_clauses = [f"{field_mapping.get(k, k)} = ?" for k in update_data.keys()]
-        update_query = f"UPDATE ServiziFisici SET {', '.join(set_clauses)} WHERE id_servizio_fisico = ?"
-        
-        params = list(update_data.values()) + [servizio_id]
+        params = list(db_update.values()) + [servizio_id]
         execute_query(update_query, tuple(params), fetch_all=False)
         
         # Return updated servizio
-        return_query = "SELECT * FROM ServiziFisici WHERE id_servizio_fisico = ?"
+        return_query = "SELECT * FROM Servizi WHERE id_servizio = ?"
         result = execute_query(return_query, (servizio_id,), fetch_one=True)
         return result
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in update_servizio_fisico: {e}")
+        logger.error(f"Error in update_servizio: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/servizi-fisici/{servizio_id}/assegnazioni", status_code=201, summary="Assegna servizio fisico")
+@app.post("/servizi/{servizio_id}/assegnazioni", status_code=201, summary="Assegna servizio")
 async def create_assegnazione_servizio_endpoint(
-    servizio_id: int = Path(..., description="ID del servizio fisico"),
+    servizio_id: int = Path(..., description="ID del servizio"),
     assegnazione: AssegnazioneServizioCreate = Body(...)
 ):
-    """Assegna un servizio fisico a un socio"""
+    """Assegna un servizio a un socio"""
     try:
-        # Check if servizio exists and get details
-        servizio_query = "SELECT id_servizio_fisico, nome, categoria FROM ServiziFisici WHERE id_servizio_fisico = ?"
+        # Check if servizio exists and get details (including fk_prezzo)
+        servizio_query = "SELECT id_servizio, nome, categoria, fk_prezzo FROM Servizi WHERE id_servizio = ?"
         servizio_row = execute_query(servizio_query, (servizio_id,), fetch_one=True)
         if not servizio_row:
-            raise HTTPException(status_code=404, detail="Servizio fisico non trovato")
+            raise HTTPException(status_code=404, detail="Servizio non trovato")
         
         # Check if associato exists
         associato_query = "SELECT id_associato FROM Associati WHERE id_associato = ?"
@@ -1004,8 +1007,8 @@ async def create_assegnazione_servizio_endpoint(
         
         # Check for overlapping assignments
         overlap_query = """
-        SELECT id_assegnazione FROM AssegnazioniServiziFisici 
-        WHERE fk_servizio_fisico = ? AND stato = 'Attivo'
+        SELECT id_assegnazione FROM AssegnazioniServizi 
+        WHERE fk_servizio = ? AND stato = 'Attivo'
         AND ((data_inizio <= ? AND data_fine >= ?) OR (data_inizio <= ? AND data_fine >= ?))
         """
         overlap_exists = execute_query(overlap_query, (
@@ -1017,22 +1020,22 @@ async def create_assegnazione_servizio_endpoint(
         if overlap_exists:
             raise HTTPException(status_code=400, detail="Servizio già assegnato nel periodo specificato")
         
-        # Compute prezzo for the service category
+        # Compute prezzo using linked prezzo record
         prezzo_row = execute_query(
-            "SELECT costo FROM PrezziServizi WHERE id_categoria_servizio = ?",
-            (servizio_row["categoria"],),
+            "SELECT costo FROM PrezziServizi WHERE id_prezzo = ?",
+            (servizio_row["fk_prezzo"],),
             fetch_one=True,
         )
         costo = float(prezzo_row.get("costo") if prezzo_row else 0.0)
 
-        # Transaction: create assegnazione, set servizio Occupato, create fattura + dettaglio
+        # Transaction: create assegnazione, set servizio Occupato, create fattura
         conn = get_db_connection()
         try:
             cur = conn.cursor()
 
             # 1) Insert new assegnazione
             insert_query = """
-            INSERT INTO AssegnazioniServiziFisici (fk_servizio_fisico, fk_associato, data_inizio, data_fine, anno_competenza, stato)
+            INSERT INTO AssegnazioniServizi (fk_servizio, fk_associato, data_inizio, data_fine, anno_competenza, stato)
             VALUES (?, ?, ?, ?, ?, ?)
             """
             cur.execute(
@@ -1049,7 +1052,7 @@ async def create_assegnazione_servizio_endpoint(
             new_id = cur.lastrowid
 
             # 2) Update servizio status to Occupato
-            cur.execute("UPDATE ServiziFisici SET stato = 'Occupato' WHERE id_servizio_fisico = ?", (servizio_id,))
+            cur.execute("UPDATE Servizi SET stato = 'Occupato' WHERE id_servizio = ?", (servizio_id,))
 
             # 3) Create Fattura (Attiva)
             imponibile = costo
@@ -1086,32 +1089,10 @@ async def create_assegnazione_servizio_endpoint(
             )
             id_fattura = cur.lastrowid
 
-            # 4) Create DettaglioFattura linked to this assegnazione
-            descr = (
-                f"Assegnazione {servizio_row['nome']} (servizio {servizio_id}) "
-                f"dal {assegnazione.data_inizio.isoformat()} al {assegnazione.data_fine.isoformat()}"
-            )
-            cur.execute(
-                """
-                INSERT INTO DettagliFatture (
-                    fk_fattura, descrizione, quantita, prezzo_unitario, importo_totale,
-                    fk_assegnazione_servizio_fisico, fk_erogazione_servizio_prestazionale
-                ) VALUES (?, ?, ?, ?, ?, ?, NULL)
-                """,
-                (
-                    id_fattura,
-                    descr,
-                    1.0,
-                    costo,
-                    costo,
-                    new_id,
-                ),
-            )
-
             conn.commit()
 
             # Return created assegnazione plus invoice info
-            created = execute_query("SELECT * FROM AssegnazioniServiziFisici WHERE id_assegnazione = ?", (new_id,), fetch_one=True)
+            created = execute_query("SELECT * FROM AssegnazioniServizi WHERE id_assegnazione = ?", (new_id,), fetch_one=True)
             created = dict(created)
             created.update({
                 "id_fattura": id_fattura,
@@ -1132,38 +1113,31 @@ async def create_assegnazione_servizio_endpoint(
         logger.error(f"Error in create_assegnazione_servizio: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.put("/assegnazioni-servizi-fisici/{assegnazione_id}", summary="Aggiorna assegnazione servizio fisico")
+@app.put("/assegnazioni-servizi/{assegnazione_id}", summary="Aggiorna assegnazione servizio")
 async def update_assegnazione_servizio_endpoint(
     assegnazione_id: int = Path(..., description="ID dell'assegnazione"),
     assegnazione: AssegnazioneServizioUpdate = Body(...)
 ):
-    """Aggiorna un'assegnazione di servizio fisico esistente"""
+    """Aggiorna un'assegnazione di servizio esistente"""
     try:
         # Check if assegnazione exists
-        check_query = "SELECT * FROM AssegnazioniServiziFisici WHERE id_assegnazione = ?"
+        check_query = "SELECT * FROM AssegnazioniServizi WHERE id_assegnazione = ?"
         existing = execute_query(check_query, (assegnazione_id,), fetch_one=True)
         if not existing:
             raise HTTPException(status_code=404, detail="Assegnazione non trovata")
         
-        # Build update query dynamically
         update_data = assegnazione.model_dump(exclude_unset=True)
         if not update_data:
             raise HTTPException(status_code=400, detail="Nessun campo da aggiornare")
         
-        # Convert dates to ISO format if present
-        if 'data_inizio' in update_data and update_data['data_inizio']:
-            update_data['data_inizio'] = update_data['data_inizio'].isoformat()
-        if 'data_fine' in update_data and update_data['data_fine']:
-            update_data['data_fine'] = update_data['data_fine'].isoformat()
-        
         set_clauses = [f"{key} = ?" for key in update_data.keys()]
-        update_query = f"UPDATE AssegnazioniServiziFisici SET {', '.join(set_clauses)} WHERE id_assegnazione = ?"
+        update_query = f"UPDATE AssegnazioniServizi SET {', '.join(set_clauses)} WHERE id_assegnazione = ?"
         
         params = list(update_data.values()) + [assegnazione_id]
         execute_query(update_query, tuple(params), fetch_all=False)
         
         # Return updated assegnazione
-        return_query = "SELECT * FROM AssegnazioniServiziFisici WHERE id_assegnazione = ?"
+        return_query = "SELECT * FROM AssegnazioniServizi WHERE id_assegnazione = ?"
         result = execute_query(return_query, (assegnazione_id,), fetch_one=True)
         return result
         
@@ -1172,127 +1146,6 @@ async def update_assegnazione_servizio_endpoint(
     except Exception as e:
         logger.error(f"Error in update_assegnazione_servizio: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-# ===== ENDPOINTS SERVIZI PRESTAZIONALI =====
-
-@app.get("/servizi-prestazionali", summary="Lista servizi prestazionali")
-async def list_servizi_prestazionali(
-    search: Optional[str] = Query(None, description="Cerca per nome prestazione")
-):
-    """Recupera la lista dei servizi prestazionali"""
-    try:
-        where_clauses = []
-        params = []
-        
-        if search:
-            where_clauses.append("nome_prestazione LIKE ?")
-            params.append(f"%{search}%")
-        
-        where_clause = " AND ".join(where_clauses) if where_clauses else "1=1"
-        
-        query = f"""
-        SELECT id_prestazione, nome_prestazione, descrizione, costo
-        FROM Prestazioni 
-        WHERE {where_clause}
-        ORDER BY nome_prestazione
-        """
-        
-        results = execute_query(query, tuple(params))
-        
-        return {
-            "count": len(results),
-            "results": results
-        }
-    except Exception as e:
-        logger.error(f"Error in list_servizi_prestazionali: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/servizi-prestazionali", status_code=201, summary="Crea servizio prestazionale")
-async def create_servizio_prestazionale_endpoint(prestazione: PrestazioneCreate):
-    """Crea un nuovo servizio prestazionale"""
-    try:
-        insert_query = """
-        INSERT INTO Prestazioni (nome_prestazione, descrizione, costo)
-        VALUES (?, ?, ?)
-        """
-        
-        params = (
-            prestazione.nome_prestazione,
-            prestazione.descrizione,
-            prestazione.costo
-        )
-        
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(insert_query, params)
-        new_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-        
-        return_query = "SELECT * FROM Prestazioni WHERE id_prestazione = ?"
-        result = execute_query(return_query, (new_id,), fetch_one=True)
-        return result
-        
-    except Exception as e:
-        logger.error(f"Error in create_servizio_prestazionale: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/servizi-prestazionali/{prestazione_id}", summary="Dettagli servizio prestazionale")
-async def get_servizio_prestazionale_endpoint(
-    prestazione_id: int = Path(..., description="ID del servizio prestazionale")
-):
-    """Recupera i dettagli di un servizio prestazionale"""
-    try:
-        query = "SELECT * FROM Prestazioni WHERE id_prestazione = ?"
-        prestazione = execute_query(query, (prestazione_id,), fetch_one=True)
-        
-        if not prestazione:
-            raise HTTPException(status_code=404, detail="Servizio prestazionale non trovato")
-        
-        return prestazione
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in get_servizio_prestazionale: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.put("/servizi-prestazionali/{prestazione_id}", summary="Aggiorna servizio prestazionale")
-async def update_servizio_prestazionale_endpoint(
-    prestazione_id: int = Path(..., description="ID del servizio prestazionale"),
-    prestazione: PrestazioneUpdate = Body(...)
-):
-    """Aggiorna i dati di un servizio prestazionale"""
-    try:
-        check_query = "SELECT id_prestazione FROM Prestazioni WHERE id_prestazione = ?"
-        existing = execute_query(check_query, (prestazione_id,), fetch_one=True)
-        if not existing:
-            raise HTTPException(status_code=404, detail="Servizio prestazionale non trovato")
-        
-        update_data = {k: v for k, v in prestazione.dict().items() if v is not None}
-        
-        if not update_data:
-            raise HTTPException(status_code=400, detail="Nessun campo da aggiornare")
-        
-        set_clauses = [f"{k} = ?" for k in update_data.keys()]
-        update_query = f"UPDATE Prestazioni SET {', '.join(set_clauses)} WHERE id_prestazione = ?"
-        
-        params = list(update_data.values()) + [prestazione_id]
-        execute_query(update_query, tuple(params), fetch_all=False)
-        
-        return_query = "SELECT * FROM Prestazioni WHERE id_prestazione = ?"
-        result = execute_query(return_query, (prestazione_id,), fetch_one=True)
-        return result
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in update_servizio_prestazionale: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ===== ENDPOINTS EROGAZIONI PRESTAZIONI =====
-
-@app.get("/erogazioni-prestazioni", summary="Lista erogazioni prestazioni")
 async def list_erogazioni_prestazioni(
     associato_id: Optional[int] = Query(None, description="Filtra per ID associato"),
     prestazione_id: Optional[int] = Query(None, description="Filtra per ID prestazione"),
@@ -1350,6 +1203,59 @@ async def list_erogazioni_prestazioni(
         result = execute_query(query, tuple(params))
         return result
         
+    except Exception as e:
+        logger.error(f"Error in list_erogazioni_prestazioni: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/erogazioni-prestazioni", summary="Lista erogazioni prestazioni")
+async def list_erogazioni_prestazioni(
+    associato_id: Optional[int] = Query(None, description="Filtra per associato"),
+    prestazione_id: Optional[int] = Query(None, description="Filtra per prestazione"),
+    data_da: Optional[str] = Query(None, description="Data da (YYYY-MM-DD)"),
+    data_a: Optional[str] = Query(None, description="Data a (YYYY-MM-DD)"),
+    search: Optional[str] = Query(None, description="Testo su nome/cognome/descrizione")
+):
+    try:
+        where_clauses = []
+        params = []
+        if associato_id:
+            where_clauses.append("ep.fk_associato = ?")
+            params.append(associato_id)
+        if prestazione_id:
+            where_clauses.append("ep.fk_prestazione = ?")
+            params.append(prestazione_id)
+        if data_da:
+            where_clauses.append("date(ep.data_erogazione) >= date(?)")
+            params.append(data_da)
+        if data_a:
+            where_clauses.append("date(ep.data_erogazione) <= date(?)")
+            params.append(data_a)
+        if search:
+            like = f"%{search}%"
+            where_clauses.append("(a.nome LIKE ? OR a.cognome LIKE ? OR p.nome_prestazione LIKE ? OR p.descrizione LIKE ?)")
+            params.extend([like, like, like, like])
+
+        where_clause = " AND ".join(where_clauses) if where_clauses else "1=1"
+
+        query = f"""
+        SELECT 
+            ep.id_erogazione,
+            ep.data_erogazione,
+            a.nome || ' ' || a.cognome as associato_nome,
+            a.id_associato,
+            p.nome_prestazione,
+            p.descrizione,
+            p.costo,
+            p.id_prestazione
+        FROM ErogazioniPrestazioni ep
+        JOIN Associati a ON ep.fk_associato = a.id_associato
+        JOIN Prestazioni p ON ep.fk_prestazione = p.id_prestazione
+        WHERE {where_clause}
+        ORDER BY ep.data_erogazione DESC
+        """
+
+        result = execute_query(query, tuple(params))
+        return result
     except Exception as e:
         logger.error(f"Error in list_erogazioni_prestazioni: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1692,18 +1598,12 @@ async def report_fatturato(
 # ===== ENDPOINT PREZZI SERVIZI =====
 
 class PrezzoServizioCreate(BaseModel):
-    id_categoria_servizio: str = Field(..., max_length=50)
+    categoria_servizio: str = Field(..., max_length=100)
     costo: float = Field(..., gt=0)
-    validita_dal: date
-    validita_al: Optional[date] = None
-    note: Optional[str] = Field(None, max_length=200)
 
 class PrezzoServizioUpdate(BaseModel):
-    id_categoria_servizio: Optional[str] = Field(None, max_length=50)
+    categoria_servizio: Optional[str] = Field(None, max_length=100)
     costo: Optional[float] = Field(None, gt=0)
-    validita_dal: Optional[date] = None
-    validita_al: Optional[date] = None
-    note: Optional[str] = Field(None, max_length=200)
 
 @app.get("/prezzi-servizi", summary="Lista prezzi servizi")
 async def list_prezzi_servizi(
@@ -1716,10 +1616,10 @@ async def list_prezzi_servizi(
     params = []
     
     if categoria:
-        query += " WHERE id_categoria_servizio LIKE ?"
+        query += " WHERE categoria_servizio LIKE ?"
         params.append(f"%{categoria}%")
     
-    query += " ORDER BY id_categoria_servizio LIMIT ? OFFSET ?"
+    query += " ORDER BY categoria_servizio LIMIT ? OFFSET ?"
     params.extend([limit, offset])
     
     prezzi = execute_query(query, tuple(params))
@@ -1728,34 +1628,17 @@ async def list_prezzi_servizi(
 @app.post("/prezzi-servizi", status_code=201, summary="Crea prezzo servizio")
 async def create_prezzo_servizio(prezzo: PrezzoServizioCreate):
     """Crea un nuovo prezzo per categoria servizio"""
-    # Check if categoria already exists with overlapping dates
-    check_query = """
-        SELECT id_prezzo FROM PrezziServizi 
-        WHERE id_categoria_servizio = ? 
-        AND (validita_al IS NULL OR validita_al >= ?)
-        AND validita_dal <= ?
-    """
-    validita_al = prezzo.validita_al or date(2099, 12, 31)
-    existing = execute_query(check_query, (prezzo.id_categoria_servizio, prezzo.validita_dal, validita_al), fetch_one=True)
-    
-    if existing:
-        raise HTTPException(status_code=400, detail="Esiste già un prezzo valido per questa categoria nel periodo specificato")
-    
     insert_query = """
-        INSERT INTO PrezziServizi (id_categoria_servizio, costo, validita_dal, validita_al, note)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO PrezziServizi (categoria_servizio, costo)
+        VALUES (?, ?)
     """
     execute_query(insert_query, (
-        prezzo.id_categoria_servizio,
+        prezzo.categoria_servizio,
         prezzo.costo,
-        prezzo.validita_dal,
-        prezzo.validita_al,
-        prezzo.note
     ))
-    
     # Return created record
-    return_query = "SELECT * FROM PrezziServizi WHERE id_categoria_servizio = ? AND validita_dal = ?"
-    return execute_query(return_query, (prezzo.id_categoria_servizio, prezzo.validita_dal), fetch_one=True)
+    return_query = "SELECT * FROM PrezziServizi ORDER BY id_prezzo DESC LIMIT 1"
+    return execute_query(return_query, tuple(), fetch_one=True)
 
 @app.get("/prezzi-servizi/{prezzo_id}", summary="Dettagli prezzo servizio")
 async def get_prezzo_servizio(prezzo_id: int):
@@ -2042,6 +1925,91 @@ async def create_pagamento(pagamento: PagamentoCreate):
     return execute_query(return_query, (pagamento.fk_fattura, pagamento.data_pagamento, pagamento.importo), fetch_one=True)
 
 # ===== ENDPOINT HEALTH CHECK =====
+
+# ===== PRESTAZIONI =====
+@app.get("/prestazioni", summary="Lista prestazioni")
+async def list_prestazioni(
+    search: Optional[str] = Query(None, description="Filtro per nome prestazione"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    """Lista le prestazioni con filtro opzionale per nome e paginazione."""
+    query = """
+        SELECT id_prestazione, nome_prestazione, descrizione, costo
+        FROM Prestazioni
+        WHERE 1=1
+    """
+    params: list[Any] = []
+    if search:
+        query += " AND nome_prestazione LIKE ?"
+        params.append(f"%{search}%")
+    query += " ORDER BY nome_prestazione ASC LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
+    rows = execute_query(query, tuple(params))
+    return rows or []
+
+@app.get("/prestazioni/{prestazione_id}", summary="Dettaglio prestazione")
+async def get_prestazione(prestazione_id: int = Path(..., ge=1)):
+    """Recupera una singola prestazione per ID."""
+    row = execute_query(
+        "SELECT id_prestazione, nome_prestazione, descrizione, costo FROM Prestazioni WHERE id_prestazione = ?",
+        (prestazione_id,),
+        fetch_one=True,
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Prestazione non trovata")
+    return row
+
+@app.post("/prestazioni", status_code=201, summary="Crea prestazione")
+async def create_prestazione(prestazione: PrestazioneCreate):
+    """Crea una nuova prestazione."""
+    execute_query(
+        "INSERT INTO Prestazioni (nome_prestazione, descrizione, costo) VALUES (?, ?, ?)",
+        (
+            prestazione.nome_prestazione,
+            prestazione.descrizione,
+            prestazione.costo or 0.0,
+        ),
+    )
+    # Ritorna l'ultima prestazione inserita
+    created = execute_query(
+        "SELECT id_prestazione, nome_prestazione, descrizione, costo FROM Prestazioni ORDER BY id_prestazione DESC LIMIT 1",
+        tuple(),
+        fetch_one=True,
+    )
+    return created
+
+@app.put("/prestazioni/{prestazione_id}", summary="Aggiorna prestazione")
+async def update_prestazione(prestazione_id: int, prestazione: PrestazioneUpdate):
+    """Aggiorna campi della prestazione."""
+    existing = execute_query(
+        "SELECT id_prestazione FROM Prestazioni WHERE id_prestazione = ?",
+        (prestazione_id,),
+        fetch_one=True,
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="Prestazione non trovata")
+
+    fields = []
+    values: list[Any] = []
+    if prestazione.nome_prestazione is not None:
+        fields.append("nome_prestazione = ?")
+        values.append(prestazione.nome_prestazione)
+    if prestazione.descrizione is not None:
+        fields.append("descrizione = ?")
+        values.append(prestazione.descrizione)
+    if prestazione.costo is not None:
+        fields.append("costo = ?")
+        values.append(prestazione.costo)
+
+    if not fields:
+        # Nessun campo da aggiornare
+        return await get_prestazione(prestazione_id)
+
+    query = f"UPDATE Prestazioni SET {', '.join(fields)} WHERE id_prestazione = ?"
+    values.append(prestazione_id)
+    execute_query(query, tuple(values))
+    return await get_prestazione(prestazione_id)
 
 @app.get("/health", summary="Health check")
 async def health_check():

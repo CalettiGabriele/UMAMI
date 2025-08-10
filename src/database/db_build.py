@@ -115,16 +115,16 @@ class DatabaseBuilder:
             # Ordine di creazione delle tabelle per rispettare le foreign keys
             table_order = [
                 'Associati',
-                'ChiaviElettroniche', 
+                'ChiaviElettroniche',
                 'TessereFIV',
                 'Fornitori',
-                'ServiziFisici',
+                # Prezzi prima di Servizi per rispettare FK fk_prezzo NOT NULL
                 'PrezziServizi',
+                'Servizi',
                 'Prestazioni',
-                'AssegnazioniServiziFisici',
+                'AssegnazioniServizi',
                 'ErogazioniPrestazioni',
                 'Fatture',
-                'DettagliFatture',
                 'Pagamenti'
             ]
             

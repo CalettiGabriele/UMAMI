@@ -134,18 +134,18 @@
         }
       }
     },
-    "ServiziFisici": {
-      "description": "Catalogo delle risorse fisiche tangibili e univoche",
+    "Servizi": {
+      "description": "Catalogo dei servizi (ex ServiziFisici) con riferimento al listino prezzi",
       "columns": {
-        "id_servizio_fisico": {
+        "id_servizio": {
           "type": "INTEGER",
           "constraints": ["PRIMARY KEY", "AUTOINCREMENT"],
-          "description": "ID unico del servizio fisico"
+          "description": "ID unico del servizio"
         },
         "nome": {
           "type": "VARCHAR(100)",
           "constraints": ["NOT NULL"],
-          "description": "Nome del servizio fisico"
+          "description": "Nome del servizio"
         },
         "descrizione": {
           "type": "TEXT",
@@ -155,6 +155,11 @@
           "type": "VARCHAR(50)",
           "description": "Categoria del servizio (es. 'Posto Barca', 'Armadietto')"
         },
+        "fk_prezzo": {
+          "type": "INTEGER",
+          "constraints": ["REFERENCES PrezziServizi(id_prezzo)", "NOT NULL"],
+          "description": "Prezzo associato (1 prezzo -> N servizi)"
+        },
         "stato": {
           "type": "VARCHAR(20)",
           "constraints": ["CHECK (stato IN ('Disponibile', 'Occupato', 'In Manutenzione'))"],
@@ -163,16 +168,20 @@
       }
     },
     "PrezziServizi": {
-      "description": "Prezzario dei servizi fisici",
+      "description": "Listino prezzi dei servizi con etichetta di categoria umana",
       "columns": {
-        "id_categoria_servizio": {
+        "id_prezzo": {
           "type": "INTEGER",
           "constraints": ["PRIMARY KEY", "AUTOINCREMENT"],
-          "description": "ID unico della categoria"
+          "description": "ID univoco del prezzo"
+        },
+        "categoria_servizio": {
+          "type": "VARCHAR(100)",
+          "description": "Etichetta della categoria del servizio"
         },
         "costo": {
           "type": "DECIMAL(10,2)",
-          "description": "Prezzo di listino del servizio"
+          "description": "Prezzo di listino"
         }
       }
     },
@@ -199,8 +208,8 @@
         }
       }
     },
-    "AssegnazioniServiziFisici": {
-      "description": "Tabella ponte che collega un socio a un servizio fisico per un periodo",
+    "AssegnazioniServizi": {
+      "description": "Tabella ponte che collega un socio a un servizio per un periodo",
       "columns": {
         "id_assegnazione": {
           "type": "INTEGER",
@@ -212,10 +221,10 @@
           "constraints": ["REFERENCES Associati(id_associato)", "NOT NULL"],
           "description": "Il socio che usufruisce del servizio"
         },
-        "fk_servizio_fisico": {
+        "fk_servizio": {
           "type": "INTEGER",
-          "constraints": ["REFERENCES ServiziFisici(id_servizio_fisico)", "NOT NULL"],
-          "description": "Il servizio fisico assegnato"
+          "constraints": ["REFERENCES Servizi(id_servizio)", "NOT NULL"],
+          "description": "Il servizio assegnato"
         },
         "anno_competenza": {
           "type": "INTEGER",
@@ -320,53 +329,38 @@
           "type": "VARCHAR(20)",
           "constraints": ["CHECK (stato IN ('Emessa', 'Pagata', 'Scaduta', 'Annullata'))"],
           "description": "Stato della fattura"
-        }
-      }
-    },
-    "DettagliFatture": {
-      "description": "Righe di dettaglio delle fatture",
-      "columns": {
-        "id_dettaglio": {
-          "type": "INTEGER",
-          "constraints": ["PRIMARY KEY", "AUTOINCREMENT"],
-          "description": "ID unico della riga"
         },
-        "fk_fattura": {
-          "type": "INTEGER",
-          "constraints": ["REFERENCES Fatture(id_fattura)", "NOT NULL"],
-          "description": "La fattura a cui questa riga appartiene"
+        "categoria": {
+          "type": "VARCHAR(50)",
+          "nullable": true,
+          "description": "Categoria di bilancio"
+        },
+        "gruppo": {
+          "type": "VARCHAR(50)",
+          "nullable": true,
+          "description": "Gruppo di bilancio"
+        },
+        "settore": {
+          "type": "VARCHAR(50)",
+          "nullable": true,
+          "description": "Settore di bilancio"
         },
         "descrizione": {
           "type": "TEXT",
-          "constraints": ["NOT NULL"],
-          "description": "Descrizione del servizio/prodotto"
-        },
-        "quantita": {
-          "type": "DECIMAL(10,2)",
-          "constraints": ["NOT NULL"],
-          "description": "Quantità"
-        },
-        "prezzo_unitario": {
-          "type": "DECIMAL(10,2)",
-          "constraints": ["NOT NULL"],
-          "description": "Prezzo unitario"
-        },
-        "importo_totale": {
-          "type": "DECIMAL(10,2)",
-          "constraints": ["NOT NULL"],
-          "description": "Importo totale della riga"
-        },
-        "fk_assegnazione_servizio_fisico": {
-          "type": "INTEGER",
-          "constraints": ["REFERENCES AssegnazioniServiziFisici(id_assegnazione)"],
           "nullable": true,
-          "description": "Link di tracciabilità al servizio fisico fatturato"
+          "description": "Descrizione della voce"
         },
-        "fk_erogazione_servizio_prestazionale": {
+        "fk_assegnazione_servizio": {
+          "type": "INTEGER",
+          "constraints": ["REFERENCES AssegnazioniServizi(id_assegnazione)"],
+          "nullable": true,
+          "description": "Link al servizio assegnato fatturato"
+        },
+        "fk_erogazione_prestazione": {
           "type": "INTEGER",
           "constraints": ["REFERENCES ErogazioniPrestazioni(id_erogazione)"],
           "nullable": true,
-          "description": "Link di tracciabilità al servizio prestazionale fatturato"
+          "description": "Link alla prestazione erogata fatturata"
         }
       }
     },

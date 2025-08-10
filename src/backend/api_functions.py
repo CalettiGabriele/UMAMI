@@ -421,14 +421,14 @@ def ricarica_crediti_docce(associato_id: int, crediti_da_aggiungere: float) -> D
         
         return get_chiave_elettronica(associato_id)
 
-# ===== SERVIZI FISICI =====
+# ===== SERVIZI =====
 
 def get_servizi_fisici(stato: Optional[str] = None, tipo: Optional[str] = None) -> Dict[str, Any]:
-    """Recupera lista servizi fisici"""
+    """Recupera lista servizi"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
         
-        query = "SELECT * FROM ServiziFisici WHERE 1=1"
+        query = "SELECT * FROM Servizi WHERE 1=1"
         params = []
         
         if stato:
@@ -450,12 +450,12 @@ def get_servizi_fisici(stato: Optional[str] = None, tipo: Optional[str] = None) 
         }
 
 def create_servizio_fisico(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Crea un nuovo servizio fisico"""
+    """Crea un nuovo servizio"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
         
         query = """
-        INSERT INTO ServiziFisici (nome, descrizione, categoria, stato)
+        INSERT INTO Servizi (nome, descrizione, categoria, stato)
         VALUES (?, ?, ?, ?)
         """
         
@@ -473,11 +473,11 @@ def create_servizio_fisico(data: Dict[str, Any]) -> Dict[str, Any]:
         return get_servizio_fisico_by_id(servizio_id)
 
 def get_servizio_fisico_by_id(servizio_id: int) -> Dict[str, Any]:
-    """Recupera un servizio fisico per ID"""
+    """Recupera un servizio per ID"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
         
-        cursor.execute("SELECT * FROM ServiziFisici WHERE id_servizio_fisico = ?", [servizio_id])
+        cursor.execute("SELECT * FROM Servizi WHERE id_servizio = ?", [servizio_id])
         result = cursor.fetchone()
         
         if not result:

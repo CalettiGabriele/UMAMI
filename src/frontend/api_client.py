@@ -80,14 +80,14 @@ def create_or_update_chiave(associato_id, chiave_data):
     return _request("POST", f"/associati/{associato_id}/chiave-elettronica", json=chiave_data)
 
 def ricarica_crediti(associato_id, crediti):
-    return _request("POST", f"/associati/{associato_id}/chiave-elettronica/ricarica", json={'crediti_da_aggiungere': crediti})
+    return _request("POST", f"/associati/{associato_id}/chiave-elettronica/ricarica-crediti", json={'crediti_da_aggiungere': crediti})
 
 # --- Servizi Fisici ---
 def get_servizi_fisici(tipo="", stato=""):
     params = {}
     if tipo: params['tipo'] = tipo
     if stato: params['stato'] = stato
-    data = _request("GET", "/servizi-fisici", params=params)
+    data = _request("GET", "/servizi", params=params)
     if data and isinstance(data, list):
         return pd.DataFrame(data)
     elif data and 'results' in data:
@@ -95,19 +95,19 @@ def get_servizi_fisici(tipo="", stato=""):
     return pd.DataFrame()
 
 def get_servizio_fisico(servizio_id):
-    return _request("GET", f"/servizi-fisici/{servizio_id}")
+    return _request("GET", f"/servizi/{servizio_id}")
 
 def create_servizio_fisico(servizio_data):
-    return _request("POST", "/servizi-fisici", json=servizio_data)
+    return _request("POST", "/servizi", json=servizio_data)
 
 def update_servizio_fisico(servizio_id, servizio_data):
-    return _request("PUT", f"/servizi-fisici/{servizio_id}", json=servizio_data)
+    return _request("PUT", f"/servizi/{servizio_id}", json=servizio_data)
 
 def assign_servizio_fisico(servizio_id, assegnazione_data):
-    return _request("POST", f"/servizi-fisici/{servizio_id}/assegnazioni", json=assegnazione_data)
+    return _request("POST", f"/servizi/{servizio_id}/assegnazioni", json=assegnazione_data)
 
 def update_assegnazione_servizio_fisico(assegnazione_id, assegnazione_data):
-    return _request("PUT", f"/assegnazioni-servizi-fisici/{assegnazione_id}", json=assegnazione_data)
+    return _request("PUT", f"/assegnazioni-servizi/{assegnazione_id}", json=assegnazione_data)
 
 # --- Report ---
 def get_report_soci_morosi(giorni_scadenza=0, importo_minimo=None, include_sospesi=False):
@@ -211,7 +211,7 @@ def get_pagamento(pagamento_id):
 # --- Prestazioni ---
 def get_prestazioni(search=""):
     params = {'search': search} if search else {}
-    data = _request("GET", "/servizi-prestazionali", params=params)
+    data = _request("GET", "/prestazioni", params=params)
     if data and isinstance(data, list):
         return pd.DataFrame(data)
     elif data and 'results' in data:
@@ -219,13 +219,13 @@ def get_prestazioni(search=""):
     return pd.DataFrame()
 
 def get_prestazione(prestazione_id):
-    return _request("GET", f"/servizi-prestazionali/{prestazione_id}")
+    return _request("GET", f"/prestazioni/{prestazione_id}")
 
 def create_prestazione(prestazione_data):
-    return _request("POST", "/servizi-prestazionali", json=prestazione_data)
+    return _request("POST", "/prestazioni", json=prestazione_data)
 
 def update_prestazione(prestazione_id, prestazione_data):
-    return _request("PUT", f"/servizi-prestazionali/{prestazione_id}", json=prestazione_data)
+    return _request("PUT", f"/prestazioni/{prestazione_id}", json=prestazione_data)
 
 # --- Erogazioni Prestazioni ---
 def get_erogazioni_prestazioni(associato_id=None, prestazione_id=None, data_da=None, data_a=None, search=None):

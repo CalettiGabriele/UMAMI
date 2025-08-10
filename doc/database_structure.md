@@ -75,25 +75,26 @@ Anagrafica delle entità da cui l'associazione acquista beni o servizi.
 
 Contiene il catalogo di tutti i servizi, fisici e prestazionali, offerti dall'associazione.
 
-#### **ServiziFisici**
+#### **Servizi**
 
-Catalogo delle risorse fisiche tangibili e univoche (es. posti barca, armadietti).
+Catalogo delle risorse/servizi tangibili e univoci (es. posti barca, armadietti).
 
-| Campo                | Tipo | Note                    | Descrizione                                                                                                                                                             |
-| -------------------- | ---- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| id\_servizio\_fisico | INT  | PK, AUTO\_INCREMENT     | ID unico della risorsa fisica                                                                                                                                           |
-| tipo\_servizio       | INT  | FK \-&gt; PrezziServizi | Collega il servizio fisico alla sua categoria di servizi (Ci sono molteplici stipetti che sono distinti ma fanno parte della stessa categoria e ahnno lo stesso prezzo) |
-| descrizione          | TEXT |                         | Dettagli sulla risorsa                                                                                                                                                  |
-| stato                | ENUM |                         | Stato attuale della risorsa ('Disponibile', 'Occupato', 'In Manutenzione')                                                                                              |
+| Campo        | Tipo | Note                | Descrizione                                                                                                                        |
+| ------------ | ---- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| id\_servizio | INT  | PK, AUTO\_INCREMENT | ID unico del servizio                                                                                                             |
+| fk\_prezzo   | INT  | FK -> PrezziServizi | Prezzo associato al servizio (1 prezzo -> N servizi)                                                                              |
+| descrizione  | TEXT |                     | Dettagli sulla risorsa/servizio                                                                                                   |
+| stato        | ENUM |                     | Stato attuale del servizio ('Disponibile', 'Occupato', 'In Manutenzione')                                                         |
 
 #### PrezziServizi
 
-Prezzario dei servizi fisici.
+Prezzario dei servizi. Un record di prezzo può essere associato a più servizi.
 
-| Campo                 | Tipo    | Note                | Descrizione                    |
-| --------------------- | ------- | ------------------- | ------------------------------ |
-| id_categoria_servizio | INT     | PK, AUTO\_INCREMENT | ID unico della categoria       |
-| costo                 | DECIMAL |                     | Prezzo di listino del servizio |
+| Campo               | Tipo    | Note                | Descrizione                                            |
+| ------------------- | ------- | ------------------- | ------------------------------------------------------ |
+| id\_prezzo          | INT     | PK, AUTO\_INCREMENT | ID univoco del prezzo                                  |
+| categoria\_servizio | VARCHAR |                     | Etichetta umana per la categoria del servizio (es. "Posto Barca A", "Armadietto") |
+| costo               | DECIMAL |                     | Prezzo di listino                                      |
 
 #### **Prestazioni**
 
@@ -110,20 +111,17 @@ Catalogo di tutti i servizi non tangibili (corsi, noleggi, quote, eventi).
 
 Tabelle che gestiscono i flussi finanziari e legano i soci ai servizi.
 
-#### **AssegnazioniServiziFisici**
+#### **AssegnazioniServizi**
 
-Tabella ponte che collega un socio a un servizio fisico per un periodo.
+Tabella ponte che collega un socio a un servizio per un periodo.
 
-| Campo                | Tipo | Note                | Descrizione                                     |
-| -------------------- | ---- | ------------------- | ----------------------------------------------- |
-| id\_assegnazione     | INT  | PK, AUTO\_INCREMENT | ID unico dell'assegnazione                      |
-| fk\_associato        | INT  | FK -> Associati     | Il socio a cui è assegnata la risorsa           |
-| fk\_servizio\_fisico | INT  | FK -> ServiziFisici | La risorsa fisica assegnata                     |
-| anno\_competenza     | YEAR |                     | Anno di validità dell'assegnazione (per rinnovi |
-| data\_inizio         | DATE |                     | Data di inizio dell'assegnazione                |
-
-
-
+| Campo            | Tipo | Note              | Descrizione                                     |
+| ---------------- | ---- | ----------------- | ----------------------------------------------- |
+| id\_assegnazione | INT  | PK, AUTO\_INCREMENT | ID unico dell'assegnazione                      |
+| fk\_associato    | INT  | FK -> Associati   | Il socio a cui è assegnata la risorsa           |
+| fk\_servizio     | INT  | FK -> Servizi     | Il servizio assegnato                           |
+| anno\_competenza | YEAR |                   | Anno di validità dell'assegnazione (per rinnovi |
+| data\_inizio     | DATE |                   | Data di inizio dell'assegnazione                |
 
 #### **ErogazioniPrestazioni**
 
@@ -132,7 +130,7 @@ Tabella ponte che registra l'iscrizione/fruizione di un servizio prestazionale d
 | Campo            | Tipo     | Note                | Descrizione                         |
 | ---------------- | -------- | ------------------- | ----------------------------------- |
 | id\_erogazione   | INT      | PK, AUTO\_INCREMENT | ID unico dell'erogazione/iscrizione |
-| fk\_associato    | INT      | FK \-> Associati    | Il socio che fruisce del servizio   |
+| fk\_associato    | INT      | FK -> Associati    | Il socio che fruisce del servizio   |
 | fk_prestazione   | INT      | FK -> prestazioni   | La prestazione erogato              |
 | data\_erogazione | DATETIME |                     | Data dell'iscrizione                |
 
@@ -140,34 +138,27 @@ Tabella ponte che registra l'iscrizione/fruizione di un servizio prestazionale d
 
 Registro centrale di tutti i documenti contabili, sia in entrata (attivi) che in uscita (passivi).
 
-| Campo               | Tipo    | Note                       | Descrizione                                                                             |
-| ------------------- | ------- | -------------------------- | --------------------------------------------------------------------------------------- |
-| id\_fattura         | INT     | PK, AUTO\_INCREMENT        | ID unico della fattura                                                                  |
-| numero\_fattura     | VARCHAR | UNIQUE                     | Numero del documento (progressivo per fatture attive, del fornitore per quelle passive) |
-| data\_emissione     | DATE    |                            |                                                                                         |
-| data\_scadenza      | DATE    |                            |                                                                                         |
-| importo\_imponibile | DECIMAL |                            |                                                                                         |
-| importo\_iva        | DECIMAL |                            |                                                                                         |
-| importo\_totale     | DECIMAL |                            |                                                                                         |
-| tipo                | ENUM    | 'Entrata', 'Uscita'        |                                                                                         |
-| stato               | ENUM    |                            | Stato del pagamento ('Emessa', 'Pagata', 'Pagata Parzialmente', 'Stornata')             |
-| fk\_associato       | INT     | FK -> Associati, NULLABLE  |                                                                                         |
-| fk\_fornitore       | INT     | FK \-> Fornitori, NULLABLE |                                                                                         |
+| Campo                                   | Tipo    | Note                              | Descrizione                                                                             |
+| --------------------------------------- | ------- | --------------------------------- | --------------------------------------------------------------------------------------- |
+| id\_fattura                             | INT     | PK, AUTO\_INCREMENT               | ID unico della fattura                                                                  |
+| numero\_fattura                         | VARCHAR | UNIQUE                            | Numero del documento (progressivo per fatture attive, del fornitore per quelle passive) |
+| data\_emissione                         | DATE    |                                   |                                                                                         |
+| data\_scadenza                          | DATE    |                                   |                                                                                         |
+| importo\_imponibile                     | DECIMAL |                                   |                                                                                         |
+| importo\_iva                            | DECIMAL |                                   |                                                                                         |
+| importo\_totale                         | DECIMAL |                                   |                                                                                         |
+| tipo                                    | ENUM    | 'Entrata', 'Uscita'               |                                                                                         |
+| stato                                   | ENUM    |                                   | Stato del pagamento ('Emessa', 'Pagata', 'Pagata Parzialmente', 'Stornata')             |
+| fk\_associato                           | INT     | FK -> Associati, NULLABLE         |                                                                                         |
+| fk\_fornitore                           | INT     | FK -> Fornitori, NULLABLE        |                                                                                         |
+| categoria                                | ENUM    | NULLABLE                          | Categoria di bilancio (era in DettagliFattura)                                          |
+| gruppo                                   | ENUM    | NULLABLE                          | Gruppo di bilancio (era in DettagliFattura)                                             |
+| settore                                  | ENUM    | NULLABLE                          | Settore di bilancio (era in DettagliFattura)                                            |
+| descrizione                               | TEXT    | NULLABLE                          | Descrizione della voce (era in DettagliFattura)                                         |
+| fk\_assegnazione\_servizio              | INT     | FK -> AssegnazioniServizi, NULLABLE | Link di tracciabilità al servizio fatturato (era in DettagliFattura)                    |
+| fk\_erogazione\_prestazione | INT     | FK -> ErogazioniPrestazioni, NULLABLE | Link di tracciabilità al servizio prestazionale fatturato (era in DettagliFattura)      |
 
-#### **DettagliFattura**
-
-Righe di dettaglio che compongono ogni fattura, garantendo la tracciabilità. 
-
-| Campo                                   | Tipo | Note                                       | Descrizione                                               |
-| --------------------------------------- | ---- | ------------------------------------------ | --------------------------------------------------------- |
-| id\_dettaglio                           | INT  | PK, AUTO\_INCREMENT                        | ID unico della riga                                       |
-| fk\_fattura                             | INT  | FK \-> Fatture                             | La fattura a cui questa riga appartiene                   |
-| categoria                               | ENUM |                                            | Categoria di bilancio                                     |
-| gruppo                                  | ENUM |                                            | Gruppo di bilancio (contiene tante categorie)             |
-| settore                                 | ENUM |                                            | Settore di bilancio (contiene tanti gruppi)               |
-| descrizione                             | TEXT |                                            | Descrizione                                               |
-| fk\_assegnazione\_servizio\_fisico      | INT  | FK \-> AssegnazioniServiziFisici, NULLABLE | Link di tracciabilità al servizio fisico fatturato        |
-| fk\_erogazione\_servizio\_prestazionale | INT  | FK -> ErogazioniPrestazioni                | Link di tracciabilità al servizio prestazionale fatturato |
+<!-- Sezione DettagliFattura rimossa: ora ogni fattura rappresenta una singola voce e contiene i campi prima presenti nelle righe di dettaglio. -->
 
 #### **Pagamenti**
 
@@ -200,7 +191,7 @@ L'iscrizione a corsi agonistici o a regate (servizi in ServiziPrestazionali) pu�
 
 La logica rimane invariata, basandosi sul campo fk\_associato\_pagante nella tabella Associati. Il sistema raggruppa i servizi per pagante finale e crea fatture consolidate.
 
-**Esempio**: Se "Laura Verdi" (figlia) si iscrive a un corso che richiede tesseramento FIV, il costo del corso e del tesseramento verranno inseriti come righe di dettaglio nella fattura consolidata intestata a suo padre "Giovanni Verdi".
+**Esempio**: Se "Laura Verdi" (figlia) si iscrive a un corso che richiede tesseramento FIV, il costo del corso e del tesseramento verranno fatturati in un unico documento (tabella `Fatture`) intestato a suo padre "Giovanni Verdi", con descrizione e importi aggregati.
 
 ### **3.3. Ciclo di Fatturazione Attiva (Socio Singolo)**
 
