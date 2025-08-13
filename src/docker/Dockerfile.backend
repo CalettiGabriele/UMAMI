@@ -1,0 +1,65 @@
+# Dockerfile per il Backend FastAPI
+FROM python:3.11-slim as base
+
+# Installa dipendenze di sistema
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Imposta la directory di lavoro
+WORKDIR /app
+
+# Installa uv per la gestione delle dipendenze
+RUN pip install uv
+
+# Copia i file di configurazione del progetto
+COPY pyproject.toml ./
+COPY README.md ./
+
+# Installa le dipendenze
+RUN uv sync --no-dev
+
+# Development stage
+FROM base as development
+
+# Copia il codice sorgente del backend
+COPY src/backend/ ./src/backend/
+COPY src/database/ ./src/database/
+
+# Crea la directory per il database se non esiste
+RUN mkdir -p /app/data
+
+# Espone la porta 8003 (come configurato nel sistema)
+EXPOSE 8003
+
+# Variabili d'ambiente
+ENV PYTHONPATH=/app
+ENV DATABASE_PATH=/app/data/umami.db
+
+# Comando per avviare il server in modalità development
+CMD ["uv", "run", "uvicorn", "src.backend.fastapi_builder:app", "--host", "0.0.0.0", "--port", "8003", "--reload"]
+
+# Production stage
+FROM base as production
+
+# Copia il codice sorgente del backend
+COPY src/backend/ ./src/backend/
+COPY src/database/ ./src/database/
+
+# Crea la directory per il database se non esiste
+RUN mkdir -p /app/data /app/logs
+
+# Crea utente non-root per sicurezza
+RUN useradd --create-home --shell /bin/bash app \
+    && chown -R app:app /app
+USER app
+
+# Espone la porta 8003
+EXPOSE 8003
+
+# Variabili d'ambiente
+ENV PYTHONPATH=/app
+ENV DATABASE_PATH=/app/data/umami.db
+
+# Comando per avviare il server in modalità production (senza reload)
+CMD ["uv", "run", "uvicorn", "src.backend.fastapi_builder:app", "--host", "0.0.0.0", "--port", "8003"]

@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ../..
+      dockerfile: src/docker/Dockerfile.backend
+      target: production
+    container_name: umami-backend-prod
+    ports:
+      - "8003:8003"
+    volumes:
+      - umami_data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - PYTHONPATH=/app
+      - DATABASE_PATH=/app/data/umami.db
+      - ENV=production
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: src/docker/Dockerfile.frontend
+      target: production
+    container_name: umami-frontend-prod
+    ports:
+      - "7860:7860"
+    environment:
+      - PYTHONPATH=/app
+      - BACKEND_URL=http://backend:8003
+      - ENV=production
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  nginx:
+    image: nginx:alpine
+    container_name: umami-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+
+volumes:
+  umami_data:
+    driver: local

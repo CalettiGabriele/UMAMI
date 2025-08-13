@@ -1,0 +1,52 @@
+# Dockerfile per il Frontend Gradio
+FROM python:3.11-slim as base
+
+# Imposta la directory di lavoro
+WORKDIR /app
+
+# Installa uv per la gestione delle dipendenze
+RUN pip install uv
+
+# Copia i file di configurazione del progetto
+COPY pyproject.toml ./
+COPY README.md ./
+
+# Installa le dipendenze
+RUN uv sync --no-dev
+
+# Development stage
+FROM base as development
+
+# Copia il codice sorgente del frontend
+COPY src/frontend/ ./src/frontend/
+
+# Espone la porta 7860 (porta standard di Gradio)
+EXPOSE 7860
+
+# Variabili d'ambiente
+ENV PYTHONPATH=/app
+ENV BACKEND_URL=http://backend:8003
+
+# Comando per avviare l'interfaccia Gradio
+CMD ["uv", "run", "python", "src/frontend/umami_app.py"]
+
+# Production stage
+FROM base as production
+
+# Copia il codice sorgente del frontend
+COPY src/frontend/ ./src/frontend/
+
+# Crea utente non-root per sicurezza
+RUN useradd --create-home --shell /bin/bash app \
+    && chown -R app:app /app
+USER app
+
+# Espone la porta 7860
+EXPOSE 7860
+
+# Variabili d'ambiente
+ENV PYTHONPATH=/app
+ENV BACKEND_URL=http://backend:8003
+
+# Comando per avviare l'interfaccia Gradio
+CMD ["uv", "run", "python", "src/frontend/umami_app.py"]

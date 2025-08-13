@@ -245,7 +245,7 @@ def scheda_associato_ui():
             chiave_data_assegnazione = gr.Textbox(label="Data Assegnazione", interactive=False)
             chiave_data_riconsegna = gr.Textbox(label="Data Riconsegna", interactive=False)
     
-    with gr.Group():
+    with gr.Group(visible=False) as fatture_group:
         gr.Markdown("#### 💰 Fatture")
         fatture_table = gr.DataFrame(
             headers=["ID", "Numero", "Data", "Tipo", "Importo", "Stato"],
@@ -253,7 +253,7 @@ def scheda_associato_ui():
             wrap=True
         )
     
-    with gr.Group():
+    with gr.Group(visible=False) as pagamenti_group:
         gr.Markdown("#### 💳 Pagamenti")
         pagamenti_table = gr.DataFrame(
             headers=["ID", "Data", "Importo", "Metodo", "Note"],
@@ -263,13 +263,13 @@ def scheda_associato_ui():
     
     def load_associato(aid):
         if not aid:
-            return [""] * 22 + [pd.DataFrame(), pd.DataFrame()]
+            return [""] * 19 + [gr.update(visible=False), pd.DataFrame(), gr.update(visible=False), pd.DataFrame()]
         try:
             # Carica dati associato
             data = api_client.get_associato(int(aid))
             if not data:
                 gr.Warning("Associato non trovato")
-                return [""] * 22 + [pd.DataFrame(), pd.DataFrame()]
+                return [""] * 19 + [gr.update(visible=False), pd.DataFrame(), gr.update(visible=False), pd.DataFrame()]
             
             # Dati anagrafici (inclusi i nuovi campi)
             # Gestione associato di riferimento
@@ -414,11 +414,15 @@ def scheda_associato_ui():
                 print(f"Errore caricamento pagamenti: {e}")
                 pagamenti_df = pd.DataFrame(columns=["ID", "Data", "Importo", "Metodo", "Note"])
             
-            return anagrafica + fiv + chiave + [fatture_df, pagamenti_df]
+            # Visibilità sezioni in base alla presenza dati
+            fatture_vis = gr.update(visible=not fatture_df.empty)
+            pagamenti_vis = gr.update(visible=not pagamenti_df.empty)
+
+            return anagrafica + fiv + chiave + [fatture_vis, fatture_df, pagamenti_vis, pagamenti_df]
             
         except Exception as e:
             gr.Warning(f"Errore: {e}")
-            return [""] * 22 + [pd.DataFrame(), pd.DataFrame()]
+            return [""] * 19 + [gr.update(visible=False), pd.DataFrame(), gr.update(visible=False), pd.DataFrame()]
     
     def show_fiv_modal_create():
         """Mostra modal per creare tessera FIV"""
@@ -558,7 +562,7 @@ def scheda_associato_ui():
          email, telefono, stato_assoc, indirizzo,
          fiv_numero, fiv_scadenza_tesseramento, fiv_scadenza_certificato, fiv_status,
          chiave_codice, chiave_stato, chiave_credito, chiave_data_assegnazione, chiave_data_riconsegna,
-         fatture_table, pagamenti_table]
+         fatture_group, fatture_table, pagamenti_group, pagamenti_table]
     )
     
     # Click handlers per gestione tessera FIV

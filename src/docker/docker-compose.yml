@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ../..
+      dockerfile: src/docker/Dockerfile.backend
+    container_name: umami-backend
+    ports:
+      - "8003:8003"
+    volumes:
+      - umami_data:/app/data
+    environment:
+      - PYTHONPATH=/app
+      - DATABASE_PATH=/app/data/umami.db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: src/docker/Dockerfile.frontend
+    container_name: umami-frontend
+    ports:
+      - "7860:7860"
+    environment:
+      - PYTHONPATH=/app
+      - BACKEND_URL=http://backend:8003
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  umami_data:
+    driver: local
