@@ -3,7 +3,7 @@ import pandas as pd
 import gradio as gr
 
 # --- Configuration ---
-BASE_URL = "http://127.0.0.1:8003"
+BASE_URL = "http://backend:8003"
 
 # --- Generic API Request Function ---
 def _request(method, endpoint, params=None, json=None):

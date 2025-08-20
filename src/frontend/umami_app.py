@@ -149,7 +149,7 @@ def elenco_associati_ui():
                 return gr.Group(visible=True), pd.DataFrame()
                 
         except Exception as e:
-            gr.Warning(f"Errore: {str(e)}")
+            gr.Warning(f"Errore: {e}")
             return gr.Group(visible=True), pd.DataFrame()
     
     def reset_form():
@@ -298,36 +298,30 @@ def scheda_associato_ui():
                 # Calcola lo stato della tessera FIV
                 from datetime import datetime, date
                 oggi = date.today()
-                scadenza_tesseramento = fiv_data.get('scadenza_tesseramento_fiv')
-                scadenza_certificato = fiv_data.get('scadenza_certificato_medico')
                 
                 status_html = "<div style='padding: 10px; border-radius: 5px; margin-top: 10px;'>"
                 
-                # Controlla stato tesseramento
-                if scadenza_tesseramento:
-                    try:
-                        scad_tess = datetime.strptime(scadenza_tesseramento, '%Y-%m-%d').date()
-                        if scad_tess < oggi:
-                            status_html += "<p style='color: red; font-weight: bold;'>⚠️ Tesseramento FIV SCADUTO</p>"
-                        elif (scad_tess - oggi).days <= 30:
-                            status_html += "<p style='color: orange; font-weight: bold;'>⚠️ Tesseramento FIV in scadenza tra {} giorni</p>".format((scad_tess - oggi).days)
-                        else:
-                            status_html += "<p style='color: green; font-weight: bold;'>✓ Tesseramento FIV valido</p>"
-                    except:
-                        status_html += "<p style='color: gray;'>Tesseramento: data non valida</p>"
+                try:
+                    scad_tess = datetime.strptime(fiv_data['scadenza_tesseramento_fiv'], '%Y-%m-%d').date()
+                    if scad_tess < oggi:
+                        status_html += "<p style='color: red; font-weight: bold;'>⚠️ Tesseramento FIV SCADUTO</p>"
+                    elif (scad_tess - oggi).days <= 30:
+                        status_html += "<p style='color: orange; font-weight: bold;'>⚠️ Tesseramento FIV in scadenza tra {} giorni</p>".format((scad_tess - oggi).days)
+                    else:
+                        status_html += "<p style='color: green; font-weight: bold;'>✓ Tesseramento FIV valido</p>"
+                except:
+                    status_html += "<p style='color: gray;'>Tesseramento: data non valida</p>"
                 
-                # Controlla stato certificato medico
-                if scadenza_certificato:
-                    try:
-                        scad_cert = datetime.strptime(scadenza_certificato, '%Y-%m-%d').date()
-                        if scad_cert < oggi:
-                            status_html += "<p style='color: red; font-weight: bold;'>⚠️ Certificato Medico SCADUTO</p>"
-                        elif (scad_cert - oggi).days <= 30:
-                            status_html += "<p style='color: orange; font-weight: bold;'>⚠️ Certificato Medico in scadenza tra {} giorni</p>".format((scad_cert - oggi).days)
-                        else:
-                            status_html += "<p style='color: green; font-weight: bold;'>✓ Certificato Medico valido</p>"
-                    except:
-                        status_html += "<p style='color: gray;'>Certificato: data non valida</p>"
+                try:
+                    scad_cert = datetime.strptime(fiv_data['scadenza_certificato_medico'], '%Y-%m-%d').date()
+                    if scad_cert < oggi:
+                        status_html += "<p style='color: red; font-weight: bold;'>⚠️ Certificato Medico SCADUTO</p>"
+                    elif (scad_cert - oggi).days <= 30:
+                        status_html += "<p style='color: orange; font-weight: bold;'>⚠️ Certificato Medico in scadenza tra {} giorni</p>".format((scad_cert - oggi).days)
+                    else:
+                        status_html += "<p style='color: green; font-weight: bold;'>✓ Certificato Medico valido</p>"
+                except:
+                    status_html += "<p style='color: gray;'>Certificato: data non valida</p>"
                 
                 status_html += "</div>"
                 
@@ -506,12 +500,12 @@ def scheda_associato_ui():
         """Mostra modal per aggiornare anagrafica con dati esistenti"""
         if not aid:
             gr.Warning("Seleziona prima un associato")
-            return gr.Group(visible=False), "", "", "", "", ""
+            return gr.Group(visible=False), "", "", "", ""
         return gr.Group(visible=True), current_nome, current_cognome, current_cf, current_email, current_telefono
     
     def hide_anagrafica_modal():
         """Nasconde modal anagrafica"""
-        return gr.Group(visible=False), "", "", "", "", ""
+        return gr.Group(visible=False), "", "", "", ""
     
     def save_anagrafica(aid, nome_val, cognome_val, cf_val, email_val, telefono_val):
         """Salva anagrafica aggiornata"""
@@ -543,6 +537,7 @@ def scheda_associato_ui():
             
             if result:
                 gr.Info("Anagrafica aggiornata con successo!")
+                # Restituisce tutti i valori per aggiornare l'interfaccia
                 return (gr.Group(visible=False), "", "", "", "", "", 
                        anagrafica_data["nome"], anagrafica_data["cognome"], 
                        anagrafica_data["codice_fiscale"], anagrafica_data["email"], 
@@ -1018,100 +1013,83 @@ def elenco_servizi_ui():
     )
 
 def scheda_servizio_ui():
-    """Scheda dettaglio servizio fisico"""
-    gr.Markdown("### 📄 Scheda Servizio")
+    gr.Markdown("## 📖 Scheda Servizio Fisico")
     
     with gr.Row():
         servizio_id = gr.Number(label="ID Servizio", precision=0)
-        load_servizio_btn = gr.Button("📥 Carica", variant="primary")
+        load_servizio_btn = gr.Button("🔍 Carica Servizio", variant="primary")
     
-    with gr.Group():
-        gr.Markdown("#### ⚓ Dati Servizio")
-        with gr.Row():
-            servizio_nome = gr.Textbox(label="Nome", interactive=False)
-            servizio_tipo = gr.Textbox(label="Tipo", interactive=False)
-        with gr.Row():
-            servizio_descrizione = gr.Textbox(label="Descrizione", interactive=False)
-            servizio_stato = gr.Textbox(label="Stato", interactive=False)
-        with gr.Row():
-            servizio_update_btn = gr.Button("✏️ Aggiorna Servizio", variant="secondary", size="sm")
+    with gr.Row():
+        servizio_nome = gr.Textbox(label="Nome", interactive=False)
+        servizio_tipo = gr.Textbox(label="Tipo", interactive=False)
+        servizio_stato = gr.Textbox(label="Stato", interactive=False)
     
-    # Modal per aggiornamento servizio
-    with gr.Group(visible=False) as servizio_update_modal:
-        gr.Markdown("### 📝 Aggiorna Servizio")
-        with gr.Row():
-            servizio_modal_nome = gr.Textbox(label="Nome *", placeholder="Es: Posto Barca A-01")
-            servizio_modal_tipo = gr.Dropdown(label="Tipo *", choices=TIPO_SERVIZIO_CHOICES)
-        with gr.Row():
-            servizio_modal_descrizione = gr.Textbox(label="Descrizione *", placeholder="Descrizione dettagliata")
-            servizio_modal_stato = gr.Dropdown(label="Stato *", choices=STATO_SERVIZIO_CHOICES)
-        with gr.Row():
-            servizio_update_save_btn = gr.Button("💾 Salva", variant="primary")
-            servizio_update_cancel_btn = gr.Button("❌ Annulla", variant="secondary")
+    servizio_descrizione = gr.Textbox(label="Descrizione", lines=2, interactive=False)
+
+    gr.Markdown("### 🧍 Assegnazione Corrente")
+    with gr.Row():
+        associato_id_input = gr.Number(label="ID Associato", precision=0)
+        check_associato_btn = gr.Button("🔍 Verifica", variant="secondary")
     
-    with gr.Group():
-        gr.Markdown("#### 👥 Assegnazione Servizio")
-        
-        # Sezione dinamica per assegnazione corrente o nuova assegnazione
-        with gr.Row():
-            associato_id_input = gr.Number(label="ID Associato", precision=0)
-            check_associato_btn = gr.Button("🔍 Verifica", variant="secondary")
-        with gr.Row():
-            associato_nome_display = gr.Textbox(label="Nome Associato", interactive=False)
-            associato_cognome_display = gr.Textbox(label="Cognome Associato", interactive=False)
-        with gr.Row():
-            current_year = datetime.now().year
-            data_inizio = gr.Textbox(label="Data Inizio", placeholder="YYYY-MM-DD", value=f"{current_year}-01-01")
-            data_fine = gr.Textbox(label="Data Fine", placeholder="YYYY-MM-DD", value=f"{current_year}-12-31")
-        with gr.Row():
-            assign_btn = gr.Button("🔗 Assegna Servizio", variant="primary", visible=True)
-            libera_servizio_btn = gr.Button("🔓 Libera Servizio", variant="secondary", visible=False)
+    with gr.Row():
+        associato_nome_display = gr.Textbox(label="Nome Associato", interactive=False)
+        associato_cognome_display = gr.Textbox(label="Cognome Associato", interactive=False)
+
+    with gr.Row():
+        data_inizio_input = gr.Textbox(label="Data Inizio Assegnazione", placeholder="YYYY-MM-DD")
+        data_fine_input = gr.Textbox(label="Data Fine Assegnazione", placeholder="YYYY-MM-DD")
+
+    with gr.Row():
+        assign_btn = gr.Button("➕ Assegna Servizio", variant="primary", visible=True)
+        libera_servizio_btn = gr.Button("🗑️ Libera Servizio", variant="stop", visible=False)
+
+    gr.Markdown("### 📜 Storico Assegnazioni")
+    assegnazioni_table = gr.DataFrame(
+        headers=["ID", "Associato", "Data Inizio", "Data Fine", "Stato", "Anno"],
+        datatype=["number", "str", "str", "str", "str", "str"],
+        interactive=False
+    )
+
+    # --- Funzioni Logiche ---
     
-    with gr.Group():
-        gr.Markdown("#### 📅 Storico Assegnazioni")
-        assegnazioni_table = gr.DataFrame(
-            headers=["ID", "Associato", "Data Inizio", "Data Fine", "Stato", "Anno"],
-            interactive=False
-        )
-    
-    def load_servizio(sid):
-        """Carica i dati del servizio"""
-        if not sid:
-            gr.Warning("Inserisci un ID servizio")
-            return [""] * 4 + [None, "", "", "", gr.Button(visible=True), gr.Button(visible=False), pd.DataFrame()]
-        
+    def get_current_assignment(assignments):
+        """Trova l'assegnazione attiva corrente."""
+        if not assignments:
+            return None
+        today = datetime.now().date().isoformat()
+        for assignment in assignments:
+            if (safe_get(assignment, 'stato', '') == 'Attivo' and 
+                safe_get(assignment, 'data_fine', '') >= today):
+                return assignment
+        return None
+
+    def load_servizio_details(sid):
+        """Carica dettagli servizio fisico e storico assegnazioni."""
         try:
-            # Carica dati servizio
+            # Valori di default
+            servizio_data = ["", "", "", ""]
+            associato_id_val, associato_nome_val, associato_cognome_val = None, "", ""
+            data_inizio_val, data_fine_val = "", ""
+            assign_btn_visible = gr.Button(visible=True)
+            libera_btn_visible = gr.Button(visible=False)
+            assegnazioni_df = pd.DataFrame(columns=["ID", "Associato", "Data Inizio", "Data Fine", "Stato", "Anno"])
+
+            if not sid:
+                gr.Warning("Inserisci un ID servizio")
+                return servizio_data + [associato_id_val, associato_nome_val, associato_cognome_val, data_inizio_val, data_fine_val, assign_btn_visible, libera_btn_visible, assegnazioni_df]
+
             data = api_client.get_servizio_fisico(int(sid))
             if not data:
                 gr.Warning("Servizio non trovato")
-                return [""] * 4 + [None, "", "", "", gr.Button(visible=True), gr.Button(visible=False), pd.DataFrame()]
+                return servizio_data + [associato_id_val, associato_nome_val, associato_cognome_val, data_inizio_val, data_fine_val, assign_btn_visible, libera_btn_visible, assegnazioni_df]
+
+            servizio_data = [safe_get(data, 'nome', ''), safe_get(data, 'tipo', ''), safe_get(data, 'descrizione', ''), safe_get(data, 'stato', '')]
             
-            # Dati servizio (mapping da database a UI)
-            servizio_data = [
-                safe_get(data, 'nome', ''),
-                safe_get(data, 'categoria', ''),  # categoria nel DB -> tipo nell'UI
-                safe_get(data, 'descrizione', ''),
-                safe_get(data, 'stato', '')
-            ]
-            
-            # Cerca assegnazione corrente attiva
-            current_assignment = None
             assegnazioni = safe_get(data, 'assegnazioni', [])
-            
-            if assegnazioni is not None and len(assegnazioni) > 0:
-                # Cerca assegnazione attiva (stato='Attivo' e data_fine >= oggi)
-                today = datetime.now().date().isoformat()
-                for assegnazione in assegnazioni:
-                    if (safe_get(assegnazione, 'stato', '') == 'Attivo' and 
-                        safe_get(assegnazione, 'data_fine', '') >= today):
-                        current_assignment = assegnazione
-                        break
-            
-            # Prepara dati assegnazione
+            current_assignment = get_current_assignment(assegnazioni)
+
             if current_assignment:
-                # Servizio assegnato: mostra dati e pulsante "Libera Servizio"
-                associato_id_val = safe_get(current_assignment, 'fk_associato', None)
+                associato_id_val = safe_get(current_assignment, 'fk_associato')
                 associato_nome_val = safe_get(current_assignment, 'nome', '')
                 associato_cognome_val = safe_get(current_assignment, 'cognome', '')
                 data_inizio_val = safe_get(current_assignment, 'data_inizio', '')
@@ -1119,302 +1097,52 @@ def scheda_servizio_ui():
                 assign_btn_visible = gr.Button(visible=False)
                 libera_btn_visible = gr.Button(visible=True)
             else:
-                # Servizio non assegnato: campi vuoti e pulsante "Assegna Servizio"
-                associato_id_val = None  # None per gr.Number invece di stringa vuota
-                associato_nome_val = ""
-                associato_cognome_val = ""
                 current_year = datetime.now().year
                 data_inizio_val = f"{current_year}-01-01"
                 data_fine_val = f"{current_year}-12-31"
-                assign_btn_visible = gr.Button(visible=True)
-                libera_btn_visible = gr.Button(visible=False)
-            
-            # Carica assegnazioni storiche per la tabella
-            try:
-                if assegnazioni is not None and len(assegnazioni) > 0:
-                    assegnazioni_df = pd.DataFrame(assegnazioni)
-                    # Formatta le colonne per la visualizzazione
-                    if len(assegnazioni_df) > 0:  # Usa len() invece di .empty per evitare ambiguità
-                        assegnazioni_df['Associato'] = assegnazioni_df.apply(
-                            lambda row: f"{safe_get(row, 'nome', '')} {safe_get(row, 'cognome', '')}".strip(), axis=1
-                        )
-                        
-                        # Seleziona e rinomina colonne
-                        display_cols = ['id_assegnazione', 'Associato', 'data_inizio', 'data_fine', 'stato', 'anno_competenza']
-                        available_cols = [col for col in display_cols if col in assegnazioni_df.columns or col == 'Associato']
-                        
-                        if len(available_cols) >= 4:
-                            assegnazioni_df = assegnazioni_df[available_cols].rename(columns={
-                                'id_assegnazione': 'ID', 'data_inizio': 'Data Inizio', 
-                                'data_fine': 'Data Fine', 'stato': 'Stato', 'anno_competenza': 'Anno'
-                            })
-                        else:
-                            assegnazioni_df = pd.DataFrame(columns=["ID", "Associato", "Data Inizio", "Data Fine", "Stato", "Anno"])
-                else:
-                    assegnazioni_df = pd.DataFrame(columns=["ID", "Associato", "Data Inizio", "Data Fine", "Stato", "Anno"])
-            except Exception as e:
-                print(f"Errore caricamento assegnazioni: {e}")
-                assegnazioni_df = pd.DataFrame(columns=["ID", "Associato", "Data Inizio", "Data Fine", "Stato", "Anno"])
-            
-            return (servizio_data + [associato_id_val, associato_nome_val, associato_cognome_val, 
-                   data_inizio_val, data_fine_val, 
-                   assign_btn_visible, libera_btn_visible, assegnazioni_df])
-            
+
+            if assegnazioni:
+                df = pd.DataFrame(assegnazioni)
+                if not df.empty:
+                    df['Associato'] = df.apply(lambda row: f"{safe_get(row, 'nome', '')} {safe_get(row, 'cognome', '')}".strip(), axis=1)
+                    display_cols = ['id_assegnazione', 'Associato', 'data_inizio', 'data_fine', 'stato', 'anno_competenza']
+                    available_cols = [col for col in display_cols if col in df.columns or col == 'Associato']
+                    if len(available_cols) >= 4:
+                        assegnazioni_df = df[available_cols].rename(columns={'id_assegnazione': 'ID', 'data_inizio': 'Data Inizio', 'data_fine': 'Data Fine', 'stato': 'Stato', 'anno_competenza': 'Anno'})
+
+            return servizio_data + [associato_id_val, associato_nome_val, associato_cognome_val, data_inizio_val, data_fine_val, assign_btn_visible, libera_btn_visible, assegnazioni_df]
+
         except Exception as e:
-            gr.Warning(f"Errore: {e}")
-            return [""] * 4 + [None, "", "", "", gr.Button(visible=True), gr.Button(visible=False), pd.DataFrame()]
-    
+            gr.Warning(f"Errore caricamento dettagli servizio: {e}")
+            return ["", "", "", ""] + [None, "", "", "", "", gr.Button(visible=True), gr.Button(visible=False), pd.DataFrame(columns=["ID", "Associato", "Data Inizio", "Data Fine", "Stato", "Anno"])]
+
     def check_associato(aid):
-        """Verifica e carica dati associato"""
+        """Verifica e carica dati associato."""
         if not aid:
             gr.Warning("Inserisci un ID associato")
             return "", ""
-        
         try:
             data = api_client.get_associato(int(aid))
             if not data:
                 gr.Warning("Associato non trovato")
                 return "", ""
-            
             nome = safe_get(data, 'nome', '')
             cognome = safe_get(data, 'cognome', '')
-            
             if nome and cognome:
                 gr.Info(f"Associato trovato: {nome} {cognome}")
-            
             return nome, cognome
-            
         except Exception as e:
             gr.Warning(f"Errore: {e}")
             return "", ""
+
+    # --- Event Handlers ---
     
-    def assign_servizio(sid, aid, nome, cognome, data_i, data_f):
-        """Assegna servizio all'associato"""
-        if not sid:
-            gr.Warning("Carica prima un servizio")
-            return "", "", None, None, "", pd.DataFrame()
-        
-        if not aid or not nome or not cognome:
-            gr.Warning("Verifica prima l'associato")
-            return nome, cognome, data_i, data_f, "", pd.DataFrame()
-        
-        if not data_i or not data_f:
-            gr.Warning("Inserisci date di inizio e fine")
-            return nome, cognome, data_i, data_f, "", pd.DataFrame()
-        
-        # Validazione formato date (YYYY-MM-DD)
-        import re
-        date_pattern = r'^\d{4}-\d{2}-\d{2}$'
-        if not re.match(date_pattern, data_i) or not re.match(date_pattern, data_f):
-            gr.Warning("Formato date non valido. Usa YYYY-MM-DD")
-            return nome, cognome, data_i, data_f, "", pd.DataFrame()
-        
-        try:
-            # Prepara i dati per l'assegnazione
-            assegnazione_data = {
-                "fk_associato": int(aid),
-                "data_inizio": data_i,
-                "data_fine": data_f,
-                "stato": "Attivo",
-                "anno_competenza": int(data_i.split('-')[0]) if data_i else 2024
-            }
-            
-            # Chiama l'API per assegnare il servizio
-            result = api_client.assign_servizio_fisico(int(sid), assegnazione_data)
-            
-            if result:
-                gr.Info(f"Servizio assegnato con successo a {nome} {cognome}!")
-                
-                # Il backend aggiorna automaticamente lo stato a "Occupato"
-                # Ricarica i dati completi del servizio per aggiornare l'interfaccia
-                updated_data = api_client.get_servizio_fisico(int(sid))
-                assegnazioni = safe_get(updated_data, 'assegnazioni', [])
-                
-                # Trova l'assegnazione corrente attiva
-                current_assignment = None
-                today = datetime.now().date().isoformat()
-                for assegnazione in assegnazioni:
-                    if (safe_get(assegnazione, 'stato', '') == 'Attivo' and 
-                        safe_get(assegnazione, 'data_fine', '') >= today):
-                        current_assignment = assegnazione
-                        break
-                
-                # Prepara i dati per l'interfaccia (servizio ora assegnato)
-                if current_assignment:
-                    # Mostra dati assegnazione corrente e pulsante "Libera"
-                    associato_id_val = safe_get(current_assignment, 'fk_associato', None)
-                    associato_nome_val = safe_get(current_assignment, 'nome', '')
-                    associato_cognome_val = safe_get(current_assignment, 'cognome', '')
-                    data_inizio_val = safe_get(current_assignment, 'data_inizio', '')
-                    data_fine_val = safe_get(current_assignment, 'data_fine', '')
-                    assign_btn_visible = gr.Button(visible=False)
-                    libera_btn_visible = gr.Button(visible=True)
-                else:
-                    # Fallback se non trova l'assegnazione
-                    associato_id_val = int(aid)
-                    associato_nome_val = nome
-                    associato_cognome_val = cognome
-                    data_inizio_val = data_i
-                    data_fine_val = data_f
-                    assign_btn_visible = gr.Button(visible=False)
-                    libera_btn_visible = gr.Button(visible=True)
-                
-                # Prepara tabella assegnazioni storiche
-                if assegnazioni is not None and len(assegnazioni) > 0:
-                    assegnazioni_df = pd.DataFrame(assegnazioni)
-                    if len(assegnazioni_df) > 0:
-                        assegnazioni_df['Associato'] = assegnazioni_df.apply(
-                            lambda row: f"{safe_get(row, 'nome', '')} {safe_get(row, 'cognome', '')}".strip(), axis=1
-                        )
-                        display_cols = ['id_assegnazione', 'Associato', 'data_inizio', 'data_fine', 'stato', 'anno_competenza']
-                        available_cols = [col for col in display_cols if col in assegnazioni_df.columns or col == 'Associato']
-                        
-                        if len(available_cols) >= 4:
-                            assegnazioni_df = assegnazioni_df[available_cols].rename(columns={
-                                'id_assegnazione': 'ID', 'data_inizio': 'Data Inizio', 
-                                'data_fine': 'Data Fine', 'stato': 'Stato', 'anno_competenza': 'Anno'
-                            })
-                        else:
-                            assegnazioni_df = pd.DataFrame(columns=["ID", "Associato", "Data Inizio", "Data Fine", "Stato", "Anno"])
-                else:
-                    assegnazioni_df = pd.DataFrame(columns=["ID", "Associato", "Data Inizio", "Data Fine", "Stato", "Anno"])
-                
-                # Restituisce tutti i valori per aggiornare l'interfaccia
-                return (associato_id_val, associato_nome_val, associato_cognome_val, 
-                       data_inizio_val, data_fine_val,
-                       assign_btn_visible, libera_btn_visible, "Occupato", assegnazioni_df)
-            else:
-                gr.Warning("Errore durante l'assegnazione del servizio")
-                return (int(aid) if aid else None, nome, cognome, data_i, data_f, 
-                       gr.Button(visible=True), gr.Button(visible=False), "", pd.DataFrame())
-                
-        except Exception as e:
-            gr.Warning(f"Errore: {str(e)}")
-            return (int(aid) if aid else None, nome, cognome, data_i, data_f, 
-                   gr.Button(visible=True), gr.Button(visible=False), "", pd.DataFrame())
-    
-    def show_servizio_update_modal(sid, nome, tipo, descrizione, stato):
-        """Mostra modal per aggiornare servizio"""
-        if not sid:
-            gr.Warning("Carica prima un servizio")
-            return gr.Group(visible=False), "", "", "", ""
-        return gr.Group(visible=True), nome, tipo, descrizione, stato
-    
-    def hide_servizio_update_modal():
-        """Nasconde modal aggiornamento servizio"""
-        return gr.Group(visible=False), "", "", "", ""
-    
-    def save_servizio_update(sid, nome, tipo, descrizione, stato):
-        """Salva aggiornamento servizio"""
-        if not sid:
-            gr.Warning("Nessun servizio selezionato")
-            return gr.Group(visible=True), nome, tipo, descrizione, stato, "", "", "", ""
-        
-        if not nome or not tipo or not descrizione or not stato:
-            gr.Warning("Tutti i campi sono obbligatori")
-            return gr.Group(visible=True), nome, tipo, descrizione, stato, "", "", "", ""
-        
-        try:
-            # Prepara i dati per l'API (mapping UI -> modello)
-            servizio_data = {
-                "nome": nome.strip(),
-                "tipo": tipo,  # Sarà mappato a 'categoria' nel backend
-                "descrizione": descrizione.strip(),
-                "stato": stato
-            }
-            
-            # Chiama l'API per aggiornare il servizio
-            result = api_client.update_servizio_fisico(int(sid), servizio_data)
-            
-            if result:
-                gr.Info("Servizio aggiornato con successo!")
-                return (gr.Group(visible=False), "", "", "", "", 
-                       servizio_data["nome"], servizio_data["tipo"], 
-                       servizio_data["descrizione"], servizio_data["stato"])
-            else:
-                gr.Warning("Errore durante l'aggiornamento del servizio")
-                return gr.Group(visible=True), nome, tipo, descrizione, stato, "", "", "", ""
-                
-        except Exception as e:
-            gr.Warning(f"Errore: {str(e)}")
-            return gr.Group(visible=True), nome, tipo, descrizione, stato, "", "", "", ""
-    
-    def libera_servizio(sid):
-        """Libera il servizio impostando lo stato a Disponibile"""
-        if not sid:
-            gr.Warning("Nessun servizio selezionato")
-            return None, "", "", "", "", gr.Button(visible=True), gr.Button(visible=False), "Disponibile", pd.DataFrame()
-        
-        try:
-            # Prima trova l'assegnazione attiva corrente per terminarla
-            servizio_data = api_client.get_servizio_fisico(int(sid))
-            if servizio_data:
-                assegnazioni = safe_get(servizio_data, 'assegnazioni', [])
-                today = datetime.now().date().isoformat()
-                
-                # Trova assegnazione attiva da terminare
-                for assegnazione in assegnazioni:
-                    if (safe_get(assegnazione, 'stato', '') == 'Attivo' and 
-                        safe_get(assegnazione, 'data_fine', '') >= today):
-                        # Termina l'assegnazione attiva impostando data_fine a oggi
-                        assegnazione_id = safe_get(assegnazione, 'id_assegnazione')
-                        if assegnazione_id:
-                            # Aggiorna l'assegnazione per terminarla
-                            api_client.update_assegnazione_servizio_fisico(assegnazione_id, {
-                                "data_fine": today,
-                                "stato": "Terminato"
-                            })
-                        break
-            
-            # Aggiorna lo stato del servizio a "Disponibile"
-            result = api_client.update_servizio_fisico(int(sid), {"stato": "Disponibile"})
-            
-            if result:
-                gr.Info("Servizio liberato con successo!")
-                
-                # Ricarica i dati aggiornati per la tabella assegnazioni
-                updated_data = api_client.get_servizio_fisico(int(sid))
-                assegnazioni = safe_get(updated_data, 'assegnazioni', [])
-                
-                # Prepara tabella assegnazioni aggiornata
-                if assegnazioni is not None and len(assegnazioni) > 0:
-                    assegnazioni_df = pd.DataFrame(assegnazioni)
-                    if len(assegnazioni_df) > 0:
-                        assegnazioni_df['Associato'] = assegnazioni_df.apply(
-                            lambda row: f"{safe_get(row, 'nome', '')} {safe_get(row, 'cognome', '')}".strip(), axis=1
-                        )
-                        display_cols = ['id_assegnazione', 'Associato', 'data_inizio', 'data_fine', 'stato', 'anno_competenza']
-                        available_cols = [col for col in display_cols if col in assegnazioni_df.columns or col == 'Associato']
-                        
-                        if len(available_cols) >= 4:
-                            assegnazioni_df = assegnazioni_df[available_cols].rename(columns={
-                                'id_assegnazione': 'ID', 'data_inizio': 'Data Inizio', 
-                                'data_fine': 'Data Fine', 'stato': 'Stato', 'anno_competenza': 'Anno'
-                            })
-                        else:
-                            assegnazioni_df = pd.DataFrame(columns=["ID", "Associato", "Data Inizio", "Data Fine", "Stato", "Anno"])
-                else:
-                    assegnazioni_df = pd.DataFrame(columns=["ID", "Associato", "Data Inizio", "Data Fine", "Stato", "Anno"])
-                
-                # Campi vuoti per nuova assegnazione
-                current_year = datetime.now().year
-                return (None, "", "", f"{current_year}-01-01", f"{current_year}-12-31", 
-                       gr.Button(visible=True), gr.Button(visible=False), "Disponibile", assegnazioni_df)
-            else:
-                gr.Warning("Errore durante la liberazione del servizio")
-                return None, "", "", "", "", gr.Button(visible=False), gr.Button(visible=True), "", pd.DataFrame()
-                
-        except Exception as e:
-            gr.Warning(f"Errore: {str(e)}")
-            return None, "", "", "", "", gr.Button(visible=False), gr.Button(visible=True), "", pd.DataFrame()
-    
-    # Click handlers
     load_servizio_btn.click(
-        load_servizio,
+        load_servizio_details,
         [servizio_id],
         [servizio_nome, servizio_tipo, servizio_descrizione, servizio_stato, 
          associato_id_input, associato_nome_display, associato_cognome_display, 
-         data_inizio, data_fine, 
+         data_inizio_input, data_fine_input,
          assign_btn, libera_servizio_btn, assegnazioni_table]
     )
     
@@ -1422,44 +1150,6 @@ def scheda_servizio_ui():
         check_associato,
         [associato_id_input],
         [associato_nome_display, associato_cognome_display]
-    )
-    
-    assign_btn.click(
-        assign_servizio,
-        [servizio_id, associato_id_input, associato_nome_display, associato_cognome_display, data_inizio, data_fine],
-        [associato_id_input, associato_nome_display, associato_cognome_display, data_inizio, data_fine, 
-         assign_btn, libera_servizio_btn, servizio_stato, assegnazioni_table]
-    )
-    
-    servizio_update_btn.click(
-        show_servizio_update_modal,
-        [servizio_id, servizio_nome, servizio_tipo, servizio_descrizione, servizio_stato],
-        [servizio_update_modal, servizio_modal_nome, servizio_modal_tipo, 
-         servizio_modal_descrizione, servizio_modal_stato]
-    )
-    
-    servizio_update_cancel_btn.click(
-        hide_servizio_update_modal,
-        [],
-        [servizio_update_modal, servizio_modal_nome, servizio_modal_tipo, 
-         servizio_modal_descrizione, servizio_modal_stato]
-    )
-    
-    servizio_update_save_btn.click(
-        save_servizio_update,
-        [servizio_id, servizio_modal_nome, servizio_modal_tipo, 
-         servizio_modal_descrizione, servizio_modal_stato],
-        [servizio_update_modal, servizio_modal_nome, servizio_modal_tipo, 
-         servizio_modal_descrizione, servizio_modal_stato,
-         servizio_nome, servizio_tipo, servizio_descrizione, servizio_stato]
-    )
-    
-    libera_servizio_btn.click(
-        libera_servizio,
-        [servizio_id],
-        [associato_id_input, associato_nome_display, associato_cognome_display, 
-         data_inizio, data_fine, 
-         assign_btn, libera_servizio_btn, servizio_stato, assegnazioni_table]
     )
 
 def prezzario_servizi_ui():
@@ -1587,7 +1277,18 @@ def elenco_prestazioni_erogate_ui():
         nuovo_erog_btn = gr.Button("➕ Nuova Erogazione", variant="primary")
     
     erogazioni_table = gr.DataFrame(interactive=False)
-    
+
+    # Modal nuova erogazione
+    with gr.Group(visible=False) as nuova_erogazione_group:
+        gr.Markdown("#### ➕ Nuova Erogazione Prestazione")
+        with gr.Row():
+            erog_associato_id_input = gr.Number(label="ID Associato", precision=0)
+            erog_prestazione_dropdown = gr.Dropdown(label="Prestazione", choices=[], allow_custom_value=False)
+            erog_data_input = gr.Textbox(label="Data Erogazione", placeholder="YYYY-MM-DD (opzionale, default: oggi)")
+        with gr.Row():
+            erog_cancel_btn = gr.Button("Annulla", variant="secondary")
+            erog_save_btn = gr.Button("Salva", variant="primary")
+
     def load_erogazioni(associato_id, search_val, data_da_val, data_a_val):
         """Carica erogazioni prestazioni con filtri"""
         try:
@@ -1606,22 +1307,12 @@ def elenco_prestazioni_erogate_ui():
                 data_da=data_da_val,
                 data_a=data_a_val
             )
-            return df if len(df) > 0 else pd.DataFrame()
+            return df if df is not None and len(df) > 0 else pd.DataFrame()
         except Exception as e:
             gr.Warning(f"Errore: {e}")
             return pd.DataFrame()
-    
-    # --- Modal / Form Nuova Erogazione (in-scope) ---
-    with gr.Group(visible=False) as nuova_erogazione_group:
-        gr.Markdown("#### ➕ Nuova Erogazione Prestazione")
-        with gr.Row():
-            erog_associato_id_input = gr.Number(label="ID Associato", precision=0)
-            erog_prestazione_dropdown = gr.Dropdown(label="Prestazione", choices=[], allow_custom_value=False)
-            erog_data_input = gr.Textbox(label="Data Erogazione", placeholder="YYYY-MM-DD (opzionale, default: oggi)")
-        with gr.Row():
-            erog_cancel_btn = gr.Button("Annulla", variant="secondary")
-            erog_save_btn = gr.Button("Salva", variant="primary")
 
+    # --- Modal / Form Nuova Erogazione (in-scope) ---
     def open_nuova_erogazione():
         try:
             dfp = api_client.get_prestazioni("")
@@ -1654,32 +1345,35 @@ def elenco_prestazioni_erogate_ui():
 
     def save_nuova_erogazione(ass_id_val, prest_choice, data_val, f_associato, f_text, f_da, f_a):
         try:
-            payload = {}
-            if ass_id_val is None or not str(ass_id_val).strip() or float(ass_id_val) <= 0:
-                raise ValueError("Specificare un ID Associato valido")
-            payload["fk_associato"] = int(float(ass_id_val))
-
+            # Validazioni
+            if not ass_id_val:
+                raise ValueError("Specificare un ID Associato")
             if not prest_choice or not str(prest_choice).strip():
                 raise ValueError("Selezionare una prestazione")
             try:
-                payload["fk_prestazione"] = int(str(prest_choice).split(" - ")[0])
+                pid = int(str(prest_choice).split(" - ")[0])
             except Exception:
                 raise ValueError("Prestazione selezionata non valida")
-
-            data_clean = data_val.strip() if data_val and str(data_val).strip() else None
-            if data_clean:
-                payload["data_erogazione"] = data_clean
-
+            if data_val and not str(data_val).strip():
+                raise ValueError("Data non valida")
+            if data_val and len(str(data_val).strip()) != 10:
+                raise ValueError("Data non valida")
+            # Prepara i dati per l'API
+            payload = {
+                "fk_associato": ass_id_val,
+                "fk_prestazione": pid,
+            }
+            if data_val:
+                payload["data_erogazione"] = str(data_val).strip()
             api_client.create_erogazione_prestazione(payload)
             gr.Info("Erogazione creata con successo")
-
             df = load_erogazioni(f_associato, f_text, f_da, f_a)
             return (
                 gr.update(visible=False),
                 gr.update(value=None),
                 gr.update(value=None),
                 gr.update(value=""),
-                df if df is not None else pd.DataFrame()
+                df if df is not None else pd.DataFrame(),
             )
         except Exception as e:
             gr.Warning(f"Errore nel salvataggio: {e}")
@@ -2320,8 +2014,8 @@ def create_main_ui():
 if __name__ == "__main__":
     app = create_main_ui()
     app.launch(
-        server_name="127.0.0.1",
-        server_port=7861,
+        server_name="0.0.0.0",
+        server_port=7860,
         show_error=True,
         share=False
     )
