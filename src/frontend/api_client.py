@@ -109,15 +109,48 @@ def assign_servizio_fisico(servizio_id, assegnazione_data):
 def update_assegnazione_servizio_fisico(assegnazione_id, assegnazione_data):
     return _request("PUT", f"/assegnazioni-servizi/{assegnazione_id}", json=assegnazione_data)
 
-# --- Report ---
-def get_report_soci_morosi(giorni_scadenza=0, importo_minimo=None, include_sospesi=False):
+# --- Reports ---
+def get_report_soci_morosi(giorni_ritardo=0, importo_minimo=None, solo_conteggio=False):
     params = {
-        'giorni_scadenza': giorni_scadenza,
-        'include_sospesi': include_sospesi
+        'giorni_ritardo': giorni_ritardo,
+        'solo_conteggio': solo_conteggio
     }
     if importo_minimo is not None:
         params['importo_minimo'] = importo_minimo
-    data = _request("GET", "/report/soci-morosi", params=params)
+    
+    data = _request("GET", "/reports/soci-morosi", params=params)
+    if data and isinstance(data, list):
+        return pd.DataFrame(data)
+    elif data and 'results' in data:
+        return pd.DataFrame(data['results'])
+    return pd.DataFrame()
+
+def get_bilancio_economico(anno):
+    """Ottiene i dati per il bilancio economico di un anno specifico"""
+    params = {'anno': anno}
+    data = _request("GET", "/reports/bilancio-economico", params=params)
+    return data if data else {}
+
+def get_fatture_per_bilancio(anno, tipo=None):
+    """Ottiene le fatture per il bilancio economico filtrate per anno e tipo"""
+    params = {'anno': anno}
+    if tipo:
+        params['tipo'] = tipo
+    
+    data = _request("GET", "/fatture", params=params)
+    if data and isinstance(data, list):
+        return pd.DataFrame(data)
+    elif data and 'results' in data:
+        return pd.DataFrame(data['results'])
+    return pd.DataFrame()
+
+def get_pagamenti_per_bilancio(anno, tipo=None):
+    """Ottiene i pagamenti per il bilancio economico filtrati per anno e tipo"""
+    params = {'anno': anno}
+    if tipo:
+        params['tipo'] = tipo
+    
+    data = _request("GET", "/pagamenti", params=params)
     if data and isinstance(data, list):
         return pd.DataFrame(data)
     elif data and 'results' in data:
