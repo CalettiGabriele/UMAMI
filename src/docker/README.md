@@ -1,56 +1,301 @@
-# Docker Setup per UMAMI
+# 🐳 Docker Setup per UMAMI
 
-Questa cartella contiene i file Docker per eseguire il sistema UMAMI in container separati per backend e frontend.
+Questa cartella contiene la configurazione Docker completa per eseguire il sistema UMAMI con container separati per backend e frontend, **accessibili da tutta la rete locale**.
 
-## Struttura File
+## 📁 Struttura File
 
-- `Dockerfile.backend`: Container per le API FastAPI (porta 8003)
-- `Dockerfile.frontend`: Container per l'interfaccia Gradio (porta 7860)
+- `Dockerfile.backend`: Container FastAPI per le API (porta 8003)
+- `Dockerfile.frontend`: Container Gradio per l'interfaccia web (porta 7860)
 - `docker-compose.yml`: Orchestrazione completa del sistema
-- `.dockerignore`: File da escludere durante il build
+- `docker-compose.prod.yml`: Configurazione produzione con nginx
+- `nginx.conf`: Configurazione reverse proxy nginx
+- `.dockerignore`: File esclusi dal build
 - `README.md`: Questa documentazione
 
-## Quick Start
+## 🚀 Quick Start
 
-### Avvio Completo con Docker Compose
+### 1. Prerequisiti
+
+Assicurati di avere installato:
+- **Docker** (versione 20.10+)
+- **Docker Compose** (versione 2.0+)
 
 ```bash
-# Dalla directory src/docker/
-docker-compose up --build
-
-# In background
-docker-compose up -d --build
+# Verifica installazione
+docker --version
+docker compose version
 ```
 
-### Accesso ai Servizi
-
-- **Backend API**: http://localhost:8003
-  - Documentazione Swagger: http://localhost:8003/docs
-  - ReDoc: http://localhost:8003/redoc
-  - Health Check: http://localhost:8003/health
-
-- **Frontend Interface**: http://localhost:7860
-
-### Comandi Utili
+### 2. Avvio Completo
 
 ```bash
-# Visualizza i log
-docker-compose logs -f
+# Naviga nella directory docker
+cd /path/to/UMAMI/src/docker/
 
-# Visualizza solo i log del backend
-docker-compose logs -f backend
+# Avvia tutti i servizi (prima volta con build)
+docker compose up --build
 
-# Visualizza solo i log del frontend
-docker-compose logs -f frontend
+# Oppure in background (modalità detached)
+docker compose up --build -d
+```
+
+### 3. Verifica Stato Container
+
+```bash
+# Controlla lo stato dei container
+docker compose ps
+
+# Output atteso:
+# NAME             STATUS                    PORTS
+# umami-backend    Up (healthy)              0.0.0.0:8003->8003/tcp
+# umami-frontend   Up                        0.0.0.0:7860->7860/tcp
+```
+
+## 🌐 Accesso ai Servizi
+
+### 📍 Accesso Locale (dalla stessa macchina)
+
+- **🖥️ Frontend UMAMI**: http://localhost:7860
+- **⚙️ Backend API**: http://localhost:8003
+- **📚 Documentazione API**: http://localhost:8003/docs
+- **📖 ReDoc API**: http://localhost:8003/redoc
+- **💚 Health Check**: http://localhost:8003/health
+
+### 🌍 Accesso da Rete Locale (altre macchine)
+
+I servizi sono configurati per essere **accessibili da qualsiasi dispositivo sulla stessa rete**:
+
+```bash
+# Trova l'IP della macchina host
+ifconfig | grep "inet " | grep -v 127.0.0.1 | awk '{print $2}' | head -1
+# Esempio output: 192.168.1.100
+```
+
+**Da qualsiasi dispositivo sulla rete:**
+- **🖥️ Frontend UMAMI**: http://192.168.1.100:7860
+- **⚙️ Backend API**: http://192.168.1.100:8003
+- **📚 Documentazione API**: http://192.168.1.100:8003/docs
+
+### 📱 Dispositivi Supportati
+
+L'interfaccia è **responsive** e funziona su:
+- 💻 Desktop (Windows, Mac, Linux)
+- 📱 Smartphone (iOS, Android)
+- 📟 Tablet (iPad, Android)
+
+## 🔧 Gestione Container
+
+### Comandi Base
+
+```bash
+# Visualizza i log in tempo reale
+docker compose logs -f
+
+# Log specifici per servizio
+docker compose logs -f backend
+docker compose logs -f frontend
 
 # Ferma i servizi
-docker-compose down
+docker compose down
 
-# Ferma e rimuove i volumi (ATTENZIONE: cancella il database!)
-docker-compose down -v
+# Riavvia i servizi
+docker compose restart
+
+# Ricostruisci e riavvia
+docker compose up --build -d
+```
+
+### Gestione Database
+
+```bash
+# Backup del database (il volume persiste automaticamente)
+docker compose exec backend ls -la /app/data/
+
+# Ferma SENZA perdere dati
+docker compose down
+
+# Ferma e CANCELLA tutti i dati (ATTENZIONE!)
+docker compose down -v
+```
+
+### Debug e Troubleshooting
+
+```bash
+# Accedi al container backend
+docker compose exec backend bash
+
+# Accedi al container frontend  
+docker compose exec frontend bash
+
+# Verifica health check
+docker compose exec backend curl http://localhost:8003/health
 
 # Ricostruisci solo un servizio
-docker-compose build backend
+docker compose build backend
+docker compose up -d backend
+```
+
+## 📊 Monitoraggio
+
+### Health Checks
+
+Il backend include health check automatici:
+- **Intervallo**: 30 secondi
+- **Timeout**: 10 secondi
+- **Retry**: 3 tentativi
+
+```bash
+# Verifica stato health check
+docker compose ps
+# Cerca "healthy" nella colonna STATUS
+```
+
+### Log Monitoring
+
+```bash
+# Tutti i log con timestamp
+docker compose logs -f -t
+
+# Solo errori
+docker compose logs -f | grep -i error
+
+# Log delle ultime 50 righe
+docker compose logs --tail=50
+```
+
+## 🔒 Sicurezza e Rete
+
+### Configurazione Rete
+
+- **Backend**: Ascolta su `0.0.0.0:8003` (tutte le interfacce)
+- **Frontend**: Ascolta su `0.0.0.0:7860` (tutte le interfacce)
+- **Database**: Volume Docker persistente e sicuro
+
+### Firewall
+
+Assicurati che le porte siano aperte:
+```bash
+# Su macOS
+sudo pfctl -f /etc/pf.conf
+
+# Su Linux (ufw)
+sudo ufw allow 7860
+sudo ufw allow 8003
+```
+
+### Accesso Esterno
+
+Per accesso da internet (NON raccomandato per produzione):
+```bash
+# Usa la configurazione produzione con nginx
+docker compose -f docker-compose.prod.yml up --build -d
+```
+
+## 🛠️ Sviluppo
+
+### Modalità Development
+
+```bash
+# Avvia con reload automatico
+docker compose up --build
+
+# I container sono configurati per:
+# - Backend: auto-reload su cambio codice
+# - Frontend: riavvio automatico
+# - Volume bind per sviluppo live
+```
+
+### Personalizzazione
+
+Modifica `docker-compose.yml` per:
+- Cambiare porte esposte
+- Aggiungere variabili d'ambiente
+- Configurare volumi aggiuntivi
+- Personalizzare network settings
+
+## ❓ Troubleshooting
+
+### Problemi Comuni
+
+**Container non si avvia:**
+```bash
+# Controlla i log
+docker compose logs backend
+docker compose logs frontend
+
+# Verifica porte libere
+lsof -i :8003
+lsof -i :7860
+```
+
+**Database non trovato:**
+```bash
+# Verifica volume
+docker volume ls | grep umami
+docker volume inspect docker_umami_data
+```
+
+**Accesso rete non funziona:**
+```bash
+# Verifica binding porte
+docker compose ps
+# Deve mostrare 0.0.0.0:porta->porta/tcp
+
+# Testa connettività
+curl http://localhost:8003/health
+```
+
+### Reset Completo
+
+```bash
+# Ferma tutto e cancella dati
+docker compose down -v
+
+# Rimuovi immagini
+docker rmi docker-backend docker-frontend
+
+# Riavvia da zero
+docker compose up --build -d
+```
+
+## 📈 Produzione
+
+Per deployment in produzione, usa:
+```bash
+# Configurazione produzione con nginx
+docker compose -f docker-compose.prod.yml up --build -d
+
+# Include:
+# - Nginx reverse proxy
+# - SSL/TLS termination
+# - Rate limiting
+# - Security headers
+```
+
+---
+
+## 🎯 Riepilogo Comandi Essenziali
+
+```bash
+# 1. Prima volta - Avvia tutto
+cd src/docker/
+docker compose up --build -d
+
+# 2. Verifica stato
+docker compose ps
+
+# 3. Accedi all'app
+# Locale: http://localhost:7860
+# Rete: http://[IP-MACCHINA]:7860
+
+# 4. Ferma tutto
+docker compose down
+
+# 5. Riavvia
+docker compose up -d
+```
+
+🎉 **Il sistema UMAMI è ora accessibile da tutta la rete locale!**
 docker-compose build frontend
 ```
 
