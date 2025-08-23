@@ -7,8 +7,8 @@ API REST per il sistema di gestione ASD UMAMI.
 Implementa tutti gli endpoint descritti nella specifica API.
 """
 
-from fastapi import FastAPI, HTTPException, Query, Path, Body, Depends
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException, Query, Path, Body, Depends, UploadFile, File
+from fastapi.responses import JSONResponse, FileResponse
 from datetime import datetime, timedelta
 from pydantic import BaseModel, Field, EmailStr
 from typing import Optional, List, Dict, Any
@@ -16,6 +16,10 @@ from datetime import date
 import logging
 import sqlite3
 import os
+import csv
+import io
+import shutil
+import tempfile
 from pathlib import Path as PathLib
 
 # Configurazione logging
@@ -151,6 +155,19 @@ class PrezzoServizioCreate(BaseModel):
 
 class PrezzoServizioUpdate(BaseModel):
     costo: Optional[float] = Field(None, ge=0)
+
+# Impostazioni Models
+class ImportResult(BaseModel):
+    success: bool
+    message: str
+    imported_rows: int
+    errors: List[str] = []
+
+class BackupResult(BaseModel):
+    success: bool
+    message: str
+    filename: str
+    size_bytes: int
 
 # Fatture Models
 class DettaglioFatturaCreate(BaseModel):
@@ -2010,6 +2027,310 @@ async def update_prestazione(prestazione_id: int, prestazione: PrestazioneUpdate
     values.append(prestazione_id)
     execute_query(query, tuple(values))
     return await get_prestazione(prestazione_id)
+
+# ===== IMPOSTAZIONI ENDPOINTS =====
+
+@app.get("/admin/tables", summary="Lista tabelle database")
+async def get_database_tables():
+    """Restituisce la lista delle tabelle disponibili nel database per l'importazione."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+        tables = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        
+        # Filtra le tabelle di sistema
+        user_tables = [table for table in tables if not table.startswith('sqlite_')]
+        
+        return {"tables": user_tables}
+    except Exception as e:
+        logger.error(f"Errore nel recupero tabelle: {e}")
+        raise HTTPException(status_code=500, detail="Errore nel recupero delle tabelle")
+
+@app.get("/admin/tables/{table_name}/schema", summary="Schema tabella")
+async def get_table_schema(table_name: str = Path(..., description="Nome della tabella")):
+    """Restituisce lo schema di una tabella specifica per l'importazione CSV."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Verifica che la tabella esista
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        if not cursor.fetchone():
+            conn.close()
+            raise HTTPException(status_code=404, detail=f"Tabella '{table_name}' non trovata")
+        
+        # Ottieni lo schema della tabella
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        columns_info = cursor.fetchall()
+        
+        schema = []
+        for col in columns_info:
+            column_info = {
+                "name": col[1],           # nome colonna
+                "type": col[2],           # tipo dato
+                "not_null": bool(col[3]), # NOT NULL
+                "default": col[4],        # valore default
+                "primary_key": bool(col[5]) # chiave primaria
+            }
+            schema.append(column_info)
+        
+        # Ottieni anche i vincoli di foreign key
+        cursor.execute(f"PRAGMA foreign_key_list({table_name})")
+        foreign_keys = cursor.fetchall()
+        
+        fk_info = []
+        for fk in foreign_keys:
+            fk_info.append({
+                "column": fk[3],      # colonna locale
+                "references_table": fk[2], # tabella riferita
+                "references_column": fk[4] # colonna riferita
+            })
+        
+        conn.close()
+        
+        return {
+            "table_name": table_name,
+            "columns": schema,
+            "foreign_keys": fk_info,
+            "csv_example_header": ",".join([col["name"] for col in schema if not col["primary_key"]])
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Errore nel recupero schema tabella {table_name}: {e}")
+        raise HTTPException(status_code=500, detail=f"Errore nel recupero schema: {str(e)}")
+
+@app.post("/admin/import/{table_name}", summary="Importa dati CSV")
+async def import_csv_data(
+    table_name: str = Path(..., description="Nome della tabella di destinazione"),
+    file: UploadFile = File(..., description="File CSV da importare")
+):
+    """Importa dati massivi da file CSV in una tabella specifica."""
+    
+    # Verifica che il file sia CSV
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Il file deve essere in formato CSV")
+    
+    try:
+        # Leggi il contenuto del file
+        content = await file.read()
+        csv_content = content.decode('utf-8')
+        
+        # Parse CSV
+        csv_reader = csv.DictReader(io.StringIO(csv_content))
+        rows = list(csv_reader)
+        
+        if not rows:
+            return ImportResult(
+                success=False,
+                message="File CSV vuoto o formato non valido",
+                imported_rows=0,
+                errors=["Nessuna riga di dati trovata"]
+            )
+        
+        # Verifica che la tabella esista
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        if not cursor.fetchone():
+            conn.close()
+            raise HTTPException(status_code=404, detail=f"Tabella '{table_name}' non trovata")
+        
+        # Ottieni le colonne della tabella
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        table_columns = [col[1] for col in cursor.fetchall()]
+        
+        # Verifica compatibilità colonne CSV con tabella
+        csv_columns = list(rows[0].keys())
+        missing_columns = [col for col in csv_columns if col not in table_columns]
+        
+        if missing_columns:
+            conn.close()
+            return ImportResult(
+                success=False,
+                message="Colonne CSV non compatibili con la tabella",
+                imported_rows=0,
+                errors=[f"Colonne non trovate nella tabella: {', '.join(missing_columns)}"]
+            )
+        
+        # Importa i dati
+        imported_count = 0
+        errors = []
+        
+        for i, row in enumerate(rows, 1):
+            try:
+                # Filtra solo le colonne esistenti nella tabella
+                filtered_row = {k: v for k, v in row.items() if k in table_columns and v.strip()}
+                
+                if not filtered_row:
+                    errors.append(f"Riga {i}: Nessun dato valido")
+                    continue
+                
+                # Costruisci query INSERT
+                columns = list(filtered_row.keys())
+                placeholders = ', '.join(['?' for _ in columns])
+                values = list(filtered_row.values())
+                
+                query = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({placeholders})"
+                cursor.execute(query, values)
+                imported_count += 1
+                
+            except sqlite3.Error as e:
+                errors.append(f"Riga {i}: {str(e)}")
+                continue
+        
+        conn.commit()
+        conn.close()
+        
+        return ImportResult(
+            success=imported_count > 0,
+            message=f"Importazione completata: {imported_count} righe importate",
+            imported_rows=imported_count,
+            errors=errors
+        )
+        
+    except Exception as e:
+        logger.error(f"Errore nell'importazione CSV: {e}")
+        raise HTTPException(status_code=500, detail=f"Errore nell'importazione: {str(e)}")
+
+@app.post("/admin/import/database", summary="Importa database completo")
+async def import_database_backup(
+    file: UploadFile = File(..., description="File database (.db) da ripristinare")
+):
+    """Importa un backup completo del database sostituendo quello esistente."""
+    
+    # Verifica che il file sia un database SQLite
+    if not file.filename.endswith('.db'):
+        raise HTTPException(status_code=400, detail="Il file deve essere un database SQLite (.db)")
+    
+    try:
+        # Leggi il contenuto del file
+        content = await file.read()
+        
+        # Crea un file temporaneo per il nuovo database
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.db') as temp_file:
+            temp_file.write(content)
+            temp_path = temp_file.name
+        
+        # Verifica che il file sia un database SQLite valido
+        try:
+            test_conn = sqlite3.connect(temp_path)
+            test_conn.execute("SELECT name FROM sqlite_master WHERE type='table' LIMIT 1")
+            test_conn.close()
+        except sqlite3.Error:
+            os.unlink(temp_path)
+            raise HTTPException(status_code=400, detail="Il file non è un database SQLite valido")
+        
+        # Backup del database corrente
+        backup_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = str(DB_PATH).replace('.db', f'_backup_{backup_timestamp}.db')
+        
+        try:
+            # Crea backup del database esistente
+            if os.path.exists(str(DB_PATH)):
+                shutil.copy2(str(DB_PATH), backup_path)
+            
+            # Sostituisci il database corrente con quello importato
+            shutil.move(temp_path, str(DB_PATH))
+            
+            # Verifica che il nuovo database funzioni
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'")
+            table_count = cursor.fetchone()[0]
+            conn.close()
+            
+            return {
+                "success": True,
+                "message": f"Database ripristinato con successo. {table_count} tabelle trovate.",
+                "backup_created": backup_path,
+                "errors": []
+            }
+            
+        except Exception as e:
+            # In caso di errore, ripristina il backup
+            if os.path.exists(backup_path):
+                shutil.copy2(backup_path, str(DB_PATH))
+            raise e
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Errore nell'importazione database: {e}")
+        raise HTTPException(status_code=500, detail=f"Errore nell'importazione database: {str(e)}")
+
+@app.get("/admin/backup", summary="Backup database")
+async def backup_database():
+    """Crea un backup del database e lo restituisce per il download."""
+    
+    try:
+        # Crea un file temporaneo per il backup
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_filename = f"umami_backup_{timestamp}.db"
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.db') as temp_file:
+            temp_path = temp_file.name
+            
+            # Copia il database nel file temporaneo
+            shutil.copy2(str(DB_PATH), temp_path)
+            
+            # Ottieni le dimensioni del file
+            file_size = os.path.getsize(temp_path)
+            
+            # Restituisci il file per il download
+            return FileResponse(
+                path=temp_path,
+                filename=backup_filename,
+                media_type='application/octet-stream',
+                headers={
+                    "Content-Disposition": f"attachment; filename={backup_filename}",
+                    "Content-Length": str(file_size)
+                }
+            )
+            
+    except Exception as e:
+        logger.error(f"Errore nel backup del database: {e}")
+        raise HTTPException(status_code=500, detail=f"Errore nel backup: {str(e)}")
+
+@app.get("/admin/backup/info", summary="Info backup database")
+async def backup_info():
+    """Restituisce informazioni sul database per il backup."""
+    
+    try:
+        # Ottieni informazioni sul database
+        file_size = os.path.getsize(str(DB_PATH))
+        file_modified = datetime.fromtimestamp(os.path.getmtime(str(DB_PATH)))
+        
+        # Conta le righe nelle tabelle principali
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        table_counts = {}
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+        tables = [row[0] for row in cursor.fetchall() if not row[0].startswith('sqlite_')]
+        
+        for table in tables:
+            cursor.execute(f"SELECT COUNT(*) FROM {table}")
+            count = cursor.fetchone()[0]
+            table_counts[table] = count
+        
+        conn.close()
+        
+        return {
+            "database_path": str(DB_PATH),
+            "file_size_bytes": file_size,
+            "file_size_mb": round(file_size / (1024 * 1024), 2),
+            "last_modified": file_modified.isoformat(),
+            "table_counts": table_counts,
+            "total_records": sum(table_counts.values())
+        }
+        
+    except Exception as e:
+        logger.error(f"Errore nel recupero info backup: {e}")
+        raise HTTPException(status_code=500, detail=f"Errore nel recupero informazioni: {str(e)}")
 
 @app.get("/health", summary="Health check")
 async def health_check():

@@ -1,6 +1,7 @@
 import requests
 import pandas as pd
 import gradio as gr
+import os
 
 # --- Configuration ---
 BASE_URL = "http://backend:8003"
@@ -280,3 +281,54 @@ def get_erogazioni_prestazioni(associato_id=None, prestazione_id=None, data_da=N
     elif data and 'results' in data:
         return pd.DataFrame(data['results'])
     return pd.DataFrame()
+
+# --- Impostazioni - Importa/Backup ---
+def get_database_tables():
+    """Ottiene la lista delle tabelle disponibili per l'importazione."""
+    return _request("GET", "/admin/tables")
+
+def get_table_schema(table_name):
+    """Ottiene lo schema di una tabella specifica."""
+    return _request("GET", f"/admin/tables/{table_name}/schema")
+
+def import_csv_data(table_name, file_path):
+    """Importa dati CSV in una tabella specifica."""
+    try:
+        with open(file_path, 'rb') as file:
+            files = {'file': (os.path.basename(file_path), file, 'text/csv')}
+            response = requests.post(f"{BASE_URL}/admin/import/{table_name}", files=files)
+            response.raise_for_status()
+            return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Errore nell'importazione CSV: {e}")
+        gr.Warning(f"Errore nell'importazione: {str(e)}")
+        return {"success": False, "message": f"Errore: {str(e)}", "imported_rows": 0, "errors": []}
+    except Exception as e:
+        print(f"Errore imprevisto nell'importazione: {e}")
+        gr.Warning(f"Errore imprevisto: {str(e)}")
+        return {"success": False, "message": f"Errore imprevisto: {str(e)}", "imported_rows": 0, "errors": []}
+
+def import_database_backup(file_path):
+    """Importa un backup completo del database sostituendo quello esistente."""
+    try:
+        with open(file_path, 'rb') as file:
+            files = {'file': (os.path.basename(file_path), file, 'application/octet-stream')}
+            response = requests.post(f"{BASE_URL}/admin/import/database", files=files)
+            response.raise_for_status()
+            return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Errore nell'importazione database: {e}")
+        gr.Warning(f"Errore nell'importazione database: {str(e)}")
+        return {"success": False, "message": f"Errore: {str(e)}", "errors": []}
+    except Exception as e:
+        print(f"Errore imprevisto nell'importazione database: {e}")
+        gr.Warning(f"Errore imprevisto: {str(e)}")
+        return {"success": False, "message": f"Errore imprevisto: {str(e)}", "errors": []}
+
+def get_backup_info():
+    """Ottiene informazioni sul database per il backup."""
+    return _request("GET", "/admin/backup/info")
+
+def get_backup_download_url():
+    """Restituisce l'URL per il download del backup via browser."""
+    return f"{BASE_URL}/admin/backup"

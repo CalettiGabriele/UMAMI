@@ -2226,6 +2226,377 @@ def bilancio_economico_ui():
                                              andamento_mensile, top_entrate, top_uscite, scarica_pdf_btn])
     scarica_pdf_btn.click(scarica_pdf, [bilancio_state], [pdf_file])
 
+# ===== IMPOSTAZIONI SECTION =====
+
+def create_impostazioni_section():
+    """Sezione Impostazioni con sotto-tab Importa e Backup"""
+    
+    with gr.Tabs():
+        # ===== TAB IMPORTA =====
+        with gr.TabItem("📥 Importa"):
+            gr.Markdown("### Importazione Dati")
+            gr.Markdown("Importa dati CSV per singole tabelle o ripristina un backup completo del database.")
+            
+            # Selezione tipo importazione
+            with gr.Row():
+                tipo_import = gr.Radio(
+                    label="Tipo Importazione",
+                    choices=["📊 CSV Tabella Singola", "💾 Database Completo (.db)"],
+                    value="📊 CSV Tabella Singola",
+                    interactive=True
+                )
+            
+            # ===== SEZIONE CSV =====
+            with gr.Group(visible=True) as csv_section:
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        # Selezione tabella
+                        tabelle_dropdown = gr.Dropdown(
+                            label="Tabella di Destinazione *",
+                            choices=[],
+                            value=None,
+                            interactive=True
+                        )
+                        
+                        # Pulsante per caricare le tabelle
+                        carica_tabelle_btn = gr.Button("🔄 Carica Tabelle", variant="secondary", size="sm")
+                        
+                        # File upload CSV
+                        csv_file = gr.File(
+                            label="File CSV da Importare *",
+                            file_types=[".csv"],
+                            file_count="single"
+                        )
+                        
+                        # Pulsante importa CSV
+                        importa_csv_btn = gr.Button("📥 Importa CSV", variant="primary", size="lg")
+            
+            # ===== SEZIONE DATABASE =====
+            with gr.Group(visible=False) as db_section:
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        gr.Markdown("#### ⚠️ Attenzione: Ripristino Database")
+                        gr.Markdown("Il ripristino sostituirà **completamente** il database esistente. Tutti i dati attuali verranno persi.")
+                        
+                        # File upload database
+                        db_file = gr.File(
+                            label="File Database da Ripristinare (.db) *",
+                            file_types=[".db"],
+                            file_count="single"
+                        )
+                        
+                        # Checkbox conferma
+                        conferma_ripristino = gr.Checkbox(
+                            label="✅ Confermo di voler sostituire il database esistente",
+                            value=False
+                        )
+                        
+                        # Pulsante importa database
+                        importa_db_btn = gr.Button("💾 Ripristina Database", variant="stop", size="lg")
+                
+            # ===== SEZIONE RISULTATI =====
+            with gr.Row():
+                with gr.Column(scale=2):
+                    # Schema tabella (solo per CSV)
+                    schema_tabella = gr.Markdown("", visible=False)
+                    schema_dettagli = gr.Textbox(
+                        label="Schema Tabella (Header CSV)",
+                        lines=3,
+                        visible=False,
+                        interactive=False,
+                        placeholder="Seleziona una tabella per vedere lo schema..."
+                    )
+                    
+                    # Risultati importazione
+                    importa_risultato = gr.Markdown("", visible=False)
+                    importa_dettagli = gr.Textbox(
+                        label="Dettagli Importazione",
+                        lines=8,
+                        visible=False,
+                        interactive=False
+                    )
+            
+            # Funzioni per la tab Importa
+            def carica_tabelle_disponibili():
+                """Carica la lista delle tabelle disponibili"""
+                try:
+                    result = api_client.get_database_tables()
+                    if result and 'tables' in result:
+                        tables = result['tables']
+                        return gr.update(choices=tables, value=None)
+                    else:
+                        gr.Warning("Errore nel caricamento delle tabelle")
+                        return gr.update(choices=[], value=None)
+                except Exception as e:
+                    gr.Warning(f"Errore: {e}")
+                    return gr.update(choices=[], value=None)
+            
+            def mostra_schema_tabella(tabella_selezionata):
+                """Mostra lo schema della tabella selezionata"""
+                if not tabella_selezionata:
+                    return (
+                        gr.update(visible=False),
+                        gr.update(visible=False)
+                    )
+                
+                try:
+                    schema = api_client.get_table_schema(tabella_selezionata)
+                    if schema:
+                        # Costruisci la descrizione dello schema
+                        schema_info = f"### 📋 Schema Tabella: **{schema['table_name']}**\n\n"
+                        
+                        # Colonne
+                        schema_info += "**Colonne:**\n"
+                        for col in schema['columns']:
+                            required = " *(obbligatorio)*" if col['not_null'] and not col['primary_key'] else ""
+                            pk = " *(chiave primaria)*" if col['primary_key'] else ""
+                            default = f" *(default: {col['default']})*" if col['default'] else ""
+                            schema_info += f"• **{col['name']}** ({col['type']}){required}{pk}{default}\n"
+                        
+                        # Foreign keys
+                        if schema.get('foreign_keys'):
+                            schema_info += "\n**Riferimenti:**\n"
+                            for fk in schema['foreign_keys']:
+                                schema_info += f"• **{fk['column']}** → {fk['references_table']}.{fk['references_column']}\n"
+                        
+                        # Header CSV di esempio
+                        csv_header = schema.get('csv_example_header', '')
+                        
+                        return (
+                            gr.update(value=schema_info, visible=True),
+                            gr.update(value=csv_header, visible=True)
+                        )
+                    else:
+                        gr.Warning("Errore nel caricamento dello schema")
+                        return (
+                            gr.update(visible=False),
+                            gr.update(visible=False)
+                        )
+                        
+                except Exception as e:
+                    gr.Warning(f"Errore nel caricamento schema: {e}")
+                    return (
+                        gr.update(visible=False),
+                        gr.update(visible=False)
+                    )
+            
+            def cambia_tipo_import(tipo):
+                """Cambia la visualizzazione in base al tipo di importazione selezionato"""
+                if tipo == "📊 CSV Tabella Singola":
+                    return (
+                        gr.update(visible=True),   # csv_section
+                        gr.update(visible=False),  # db_section
+                        gr.update(visible=False),  # schema_tabella
+                        gr.update(visible=False)   # schema_dettagli
+                    )
+                else:  # Database Completo
+                    return (
+                        gr.update(visible=False),  # csv_section
+                        gr.update(visible=True),   # db_section
+                        gr.update(visible=False),  # schema_tabella
+                        gr.update(visible=False)   # schema_dettagli
+                    )
+            
+            def importa_csv_dati(tabella, file_obj):
+                """Importa dati CSV nella tabella selezionata"""
+                if not tabella:
+                    gr.Warning("Seleziona una tabella di destinazione")
+                    return gr.update(visible=False), gr.update(visible=False)
+                
+                if not file_obj:
+                    gr.Warning("Seleziona un file CSV da importare")
+                    return gr.update(visible=False), gr.update(visible=False)
+                
+                try:
+                    # Importa i dati
+                    result = api_client.import_csv_data(tabella, file_obj.name)
+                    
+                    if result['success']:
+                        # Successo
+                        message = f"✅ **Importazione Completata**\n\n"
+                        message += f"**Tabella:** {tabella}\n"
+                        message += f"**Righe importate:** {result['imported_rows']}\n"
+                        message += f"**Messaggio:** {result['message']}"
+                        
+                        dettagli = ""
+                        if result.get('errors'):
+                            dettagli = "**Errori riscontrati:**\n" + "\n".join(result['errors'])
+                        else:
+                            dettagli = "Importazione completata senza errori."
+                        
+                        return (
+                            gr.update(value=message, visible=True),
+                            gr.update(value=dettagli, visible=True)
+                        )
+                    else:
+                        # Errore
+                        message = f"❌ **Importazione Fallita**\n\n"
+                        message += f"**Tabella:** {tabella}\n"
+                        message += f"**Messaggio:** {result['message']}"
+                        
+                        dettagli = ""
+                        if result.get('errors'):
+                            dettagli = "**Errori:**\n" + "\n".join(result['errors'])
+                        
+                        return (
+                            gr.update(value=message, visible=True),
+                            gr.update(value=dettagli, visible=True)
+                        )
+                        
+                except Exception as e:
+                    message = f"❌ **Errore Imprevisto**\n\n{str(e)}"
+                    return (
+                        gr.update(value=message, visible=True),
+                        gr.update(value="", visible=False)
+                    )
+            
+            def importa_database_completo(file_obj, conferma):
+                """Importa un database completo sostituendo quello esistente"""
+                if not file_obj:
+                    gr.Warning("Seleziona un file database (.db) da ripristinare")
+                    return gr.update(visible=False), gr.update(visible=False)
+                
+                if not conferma:
+                    gr.Warning("Devi confermare la sostituzione del database esistente")
+                    return gr.update(visible=False), gr.update(visible=False)
+                
+                if not file_obj.name.endswith('.db'):
+                    gr.Warning("Il file deve essere un database SQLite (.db)")
+                    return gr.update(visible=False), gr.update(visible=False)
+                
+                try:
+                    # Importa il database
+                    result = api_client.import_database_backup(file_obj.name)
+                    
+                    if result['success']:
+                        # Successo
+                        message = f"✅ **Database Ripristinato con Successo**\n\n"
+                        message += f"**File:** {file_obj.name}\n"
+                        message += f"**Messaggio:** {result['message']}"
+                        
+                        dettagli = "Database completamente sostituito. Ricarica l'applicazione per vedere i nuovi dati."
+                        
+                        return (
+                            gr.update(value=message, visible=True),
+                            gr.update(value=dettagli, visible=True)
+                        )
+                    else:
+                        # Errore
+                        message = f"❌ **Ripristino Database Fallito**\n\n"
+                        message += f"**File:** {file_obj.name}\n"
+                        message += f"**Messaggio:** {result['message']}"
+                        
+                        dettagli = ""
+                        if result.get('errors'):
+                            dettagli = "**Errori:**\n" + "\n".join(result['errors'])
+                        
+                        return (
+                            gr.update(value=message, visible=True),
+                            gr.update(value=dettagli, visible=True)
+                        )
+                        
+                except Exception as e:
+                    message = f"❌ **Errore nel Ripristino Database**\n\n{str(e)}"
+                    return (
+                        gr.update(value=message, visible=True),
+                        gr.update(value="", visible=False)
+                    )
+            
+            # Event handlers per Importa
+            tipo_import.change(cambia_tipo_import, [tipo_import], [csv_section, db_section, schema_tabella, schema_dettagli])
+            carica_tabelle_btn.click(carica_tabelle_disponibili, [], [tabelle_dropdown])
+            tabelle_dropdown.change(mostra_schema_tabella, [tabelle_dropdown], [schema_tabella, schema_dettagli])
+            importa_csv_btn.click(importa_csv_dati, [tabelle_dropdown, csv_file], [importa_risultato, importa_dettagli])
+            importa_db_btn.click(importa_database_completo, [db_file, conferma_ripristino], [importa_risultato, importa_dettagli])
+        
+        # ===== TAB BACKUP =====
+        with gr.TabItem("💾 Backup"):
+            gr.Markdown("### Backup Database")
+            gr.Markdown("Scarica una copia di sicurezza completa del database tramite il browser.")
+            
+            with gr.Row():
+                with gr.Column(scale=1):
+                    # Informazioni database
+                    gr.Markdown("#### 📊 Informazioni Database")
+                    
+                    info_database = gr.Markdown("", visible=False)
+                    
+                    # Pulsanti
+                    carica_info_btn = gr.Button("🔄 Carica Informazioni", variant="secondary")
+                    
+                    # Link di download diretto
+                    backup_download_link = gr.HTML("", visible=False)
+                
+                with gr.Column(scale=2):
+                    # Istruzioni backup
+                    backup_istruzioni = gr.Markdown("""
+                    ### 📋 Come Scaricare il Backup:
+                    
+                    1. **Carica le informazioni** del database per vedere le statistiche
+                    2. **Clicca sul link di download** che apparirà sotto
+                    3. Il file verrà scaricato automaticamente nella cartella **Downloads** del browser
+                    4. Il nome del file includerà data e ora: `umami_backup_YYYYMMDD_HHMMSS.db`
+                    """, visible=True)
+            
+            # Funzioni per la tab Backup
+            def carica_info_database():
+                """Carica informazioni sul database e mostra link di download"""
+                try:
+                    result = api_client.get_backup_info()
+                    if result:
+                        info = f"**📁 Database:** {result.get('database_path', 'N/A')}\n\n"
+                        info += f"**📏 Dimensione:** {result.get('file_size_mb', 0):.2f} MB ({result.get('file_size_bytes', 0):,} bytes)\n\n"
+                        info += f"**🕒 Ultima Modifica:** {result.get('last_modified', 'N/A')}\n\n"
+                        info += f"**📊 Record Totali:** {result.get('total_records', 0):,}\n\n"
+                        
+                        if result.get('table_counts'):
+                            info += "**📋 Tabelle:**\n"
+                            for table, count in result['table_counts'].items():
+                                info += f"• {table}: {count:,} record\n"
+                        
+                        # Crea il link di download
+                        download_url = api_client.get_backup_download_url()
+                        download_html = f"""
+                        <div style="margin-top: 20px; padding: 15px; border: 2px solid #4CAF50; border-radius: 8px; background-color: #f0f8f0;">
+                            <h3 style="color: #2E7D32; margin-top: 0;">💾 Download Backup</h3>
+                            <p style="margin: 10px 0;">Clicca sul pulsante per scaricare il backup del database:</p>
+                            <a href="{download_url}" download style="
+                                display: inline-block;
+                                padding: 12px 24px;
+                                background-color: #4CAF50;
+                                color: white;
+                                text-decoration: none;
+                                border-radius: 6px;
+                                font-weight: bold;
+                                font-size: 16px;
+                            ">📥 Scarica Backup Database</a>
+                            <p style="margin: 10px 0 0 0; font-size: 12px; color: #666;">
+                                Il file verrà scaricato nella cartella Downloads del browser
+                            </p>
+                        </div>
+                        """
+                        
+                        return (
+                            gr.update(value=info, visible=True),
+                            gr.update(value=download_html, visible=True)
+                        )
+                    else:
+                        gr.Warning("Errore nel caricamento delle informazioni")
+                        return (
+                            gr.update(visible=False),
+                            gr.update(visible=False)
+                        )
+                        
+                except Exception as e:
+                    gr.Warning(f"Errore: {e}")
+                    return (
+                        gr.update(visible=False),
+                        gr.update(visible=False)
+                    )
+            
+            # Event handlers per Backup
+            carica_info_btn.click(carica_info_database, [], [info_database, backup_download_link])
+
 # ===== MAIN UI =====
 
 def create_main_ui():
@@ -2247,6 +2618,9 @@ def create_main_ui():
             
             with gr.TabItem("📊 Report"):
                 create_report_section()
+            
+            with gr.TabItem("⚙️ Settings"):
+                create_impostazioni_section()
     
     return app
 
