@@ -1,16 +1,54 @@
-# 🐳 Docker Setup per UMAMI
+# UMAMI Docker Configuration
 
-Questa cartella contiene la configurazione Docker completa per eseguire il sistema UMAMI con container separati per backend e frontend, **accessibili da tutta la rete locale**.
+Configurazione Docker completa per il sistema UMAMI con separazione backend/frontend, inizializzazione automatica del database e supporto per sviluppo e produzione.
 
-## 📁 Struttura File
+## Struttura
 
-- `Dockerfile.backend`: Container FastAPI per le API (porta 8003)
-- `Dockerfile.frontend`: Container Gradio per l'interfaccia web (porta 7860)
-- `docker-compose.yml`: Orchestrazione completa del sistema
-- `docker-compose.prod.yml`: Configurazione produzione con nginx
-- `nginx.conf`: Configurazione reverse proxy nginx
-- `.dockerignore`: File esclusi dal build
-- `README.md`: Questa documentazione
+```
+src/docker/
+├── Dockerfile.backend          # Multi-stage backend (FastAPI)
+├── Dockerfile.frontend         # Multi-stage frontend (Gradio)
+├── docker-compose.yml          # Development environment
+├── docker-compose.prod.yml     # Production environment
+├── nginx.conf                  # Nginx reverse proxy config
+├── init-db.sh                 # Script inizializzazione database automatica
+├── .dockerignore              # Ottimizzazione build
+└── README.md                  # Questa documentazione
+```
+## 🗄️ Gestione Automatica Database
+
+Il sistema UMAMI include l'**inizializzazione automatica del database** tramite lo script `init-db.sh`:
+
+### ✅ Comportamento Automatico
+
+- **Al primo avvio**: Se il database non esiste, viene creato automaticamente con tutte le tabelle vuote
+- **Avvii successivi**: Se il database esiste già, viene utilizzato senza modifiche
+- **Database corrotto**: Se il database è presente ma corrotto, viene ricreato automaticamente
+
+### 📋 Processo di Inizializzazione
+
+1. **Controllo esistenza**: Verifica se `/app/data/umami.db` esiste
+2. **Validazione database**: Se esiste, controlla che sia valido e contenga tabelle
+3. **Creazione automatica**: Se mancante o corrotto, esegue `db_build.py` per creare il database
+4. **Avvio servizio**: Procede con l'avvio del backend FastAPI
+
+### 🔍 Log di Inizializzazione
+
+Durante l'avvio del container backend, vedrai i log dell'inizializzazione:
+
+```bash
+=== UMAMI Database Initialization ===
+Database path: /app/data/umami.db
+⚠ Database non presente, inizializzazione in corso...
+🔨 Creazione database in corso...
+✓ Database inizializzato con successo!
+✓ Tabelle create: 12
+  - Associati
+  - Fornitori
+  - ServiziFisici
+  - [...]
+✓ Inizializzazione database completata
+```
 
 ## 🚀 Quick Start
 
@@ -189,6 +227,52 @@ Per accesso da internet (NON raccomandato per produzione):
 ```bash
 # Usa la configurazione produzione con nginx
 docker compose -f docker-compose.prod.yml up --build -d
+```
+
+## 🗄️ Gestione Database Avanzata
+
+Per operazioni avanzate sul database, utilizza lo script `manage-db.sh`:
+
+### 📋 Comandi Disponibili
+
+```bash
+# Mostra stato database e statistiche
+./manage-db.sh status
+
+# Ricrea database da zero (ATTENZIONE: cancella tutti i dati)
+./manage-db.sh reset
+
+# Crea backup del database
+./manage-db.sh backup
+
+# Ripristina database da backup
+./manage-db.sh restore
+
+# Mostra log di inizializzazione
+./manage-db.sh logs
+
+# Apre shell nel container backend
+./manage-db.sh shell
+```
+
+### 💾 Backup e Ripristino
+
+```bash
+# Backup automatico con timestamp
+./manage-db.sh backup
+# Crea: ./backups/umami_backup_20240901_1110.db
+
+# Ripristino da backup
+./manage-db.sh restore
+# Mostra lista backup disponibili e permette selezione
+```
+
+### 🔄 Reset Database
+
+```bash
+# Reset completo (richiede conferma)
+./manage-db.sh reset
+# ⚠️ ATTENZIONE: Cancella tutti i dati esistenti!
 ```
 
 ## 🛠️ Sviluppo

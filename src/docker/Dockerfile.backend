@@ -26,6 +26,10 @@ FROM base as development
 COPY src/backend/ ./src/backend/
 COPY src/database/ ./src/database/
 
+# Copia lo script di inizializzazione database
+COPY src/docker/init-db.sh ./init-db.sh
+RUN chmod +x ./init-db.sh
+
 # Crea la directory per il database se non esiste
 RUN mkdir -p /app/data
 
@@ -37,7 +41,7 @@ ENV PYTHONPATH=/app
 ENV DATABASE_PATH=/app/data/umami.db
 
 # Comando per avviare il server in modalità development
-CMD ["uv", "run", "uvicorn", "src.backend.fastapi_builder:app", "--host", "0.0.0.0", "--port", "8003", "--reload"]
+CMD ["sh", "-c", "./init-db.sh && uv run uvicorn src.backend.fastapi_builder:app --host 0.0.0.0 --port 8003 --reload"]
 
 # Production stage
 FROM base as production
@@ -45,6 +49,10 @@ FROM base as production
 # Copia il codice sorgente del backend
 COPY src/backend/ ./src/backend/
 COPY src/database/ ./src/database/
+
+# Copia lo script di inizializzazione database
+COPY src/docker/init-db.sh ./init-db.sh
+RUN chmod +x ./init-db.sh
 
 # Crea la directory per il database se non esiste
 RUN mkdir -p /app/data /app/logs
@@ -62,4 +70,4 @@ ENV PYTHONPATH=/app
 ENV DATABASE_PATH=/app/data/umami.db
 
 # Comando per avviare il server in modalità production (senza reload)
-CMD ["uv", "run", "uvicorn", "src.backend.fastapi_builder:app", "--host", "0.0.0.0", "--port", "8003"]
+CMD ["sh", "-c", "./init-db.sh && uv run uvicorn src.backend.fastapi_builder:app --host 0.0.0.0 --port 8003"]

@@ -29,6 +29,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# Assicurati che lo script di inizializzazione sia incluso
+!init-db.sh
+
 # IDE
 .vscode/
 .idea/
