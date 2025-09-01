@@ -2616,7 +2616,7 @@ def create_main_ui():
             with gr.TabItem("💰 Contabilità"):
                 create_contabilita_section()
             
-            with gr.TabItem("📊 Report"):
+            with gr.TabItem("📊 Reports"):
                 create_report_section()
             
             with gr.TabItem("⚙️ Settings"):
